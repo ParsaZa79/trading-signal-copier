@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "dokploy": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@sattva/dokploy-mcp"
+      ],
+      "env": {
+        "DOKPLOY_API_KEY": "LKLYorglOEAcNDgROhfYMwvltkqtWiVEzYVQSQyADClgbQFfbiWZNudcaFjoMNvc",
+        "DOKPLOY_URL": "https://www.kiaparsaprintingmoneymachine.cloud/"
+      }
+    }
+  }
+}
