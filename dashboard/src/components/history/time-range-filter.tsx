@@ -153,7 +153,7 @@ export function TimeRangeFilter({
                 "relative px-3.5 py-2 text-xs font-medium rounded-lg transition-all duration-200 flex items-center gap-1.5",
                 "focus:outline-none focus:ring-2 focus:ring-accent/30 focus:ring-offset-1 focus:ring-offset-bg-tertiary",
                 isActive
-                  ? "bg-gradient-to-b from-bg-elevated to-bg-tertiary text-text-primary shadow-sm border border-border-default"
+                  ? "bg-bg-elevated text-text-primary border border-border-default shadow-sm"
                   : "text-text-muted hover:text-text-secondary hover:bg-bg-elevated/50",
                 idx === 0 && "rounded-l-lg",
                 idx === presets.length - 1 && "rounded-r-lg"
@@ -279,10 +279,9 @@ export function TimeRangeFilter({
                   disabled={!customFrom}
                   className={cn(
                     "flex-1 px-4 py-2.5 rounded-xl text-xs font-semibold",
-                    "bg-gradient-to-r from-accent to-accent-dark text-bg-primary",
+                    "bg-text-primary text-bg-primary",
                     "hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed",
-                    "transition-all duration-200",
-                    "shadow-sm hover:shadow-md hover:shadow-accent/10"
+                    "transition-all duration-200"
                   )}
                 >
                   Apply Range

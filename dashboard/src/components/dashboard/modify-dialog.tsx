@@ -5,6 +5,7 @@ import { LegacyDialog as Dialog } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { Position } from "@/types";
+import { SymbolIcon } from "./symbol-icon";
 import { TrendingUp, TrendingDown, Target, Shield } from "lucide-react";
 
 interface ModifyDialogProps {
@@ -43,11 +44,7 @@ function ModifyForm({
       {/* Position Info */}
       <div className="p-4 rounded-xl bg-bg-tertiary border border-border-subtle">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-            <span className="text-sm font-bold text-accent">
-              {position.symbol.slice(0, 2)}
-            </span>
-          </div>
+          <SymbolIcon symbol={position.symbol} size="lg" />
           <div>
             <p className="font-semibold text-text-primary">{position.symbol}</p>
             <p className="text-xs text-text-muted">#{position.ticket}</p>

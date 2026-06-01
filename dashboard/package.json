@@ -9,7 +9,9 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@sankyu/react-circle-flags": "^1.6.7",
     "clsx": "^2.1.1",
+    "financial-flag-icons": "^1.1.4",
     "framer-motion": "^12.24.7",
     "lucide-react": "^0.562.0",
     "next": "16.1.1",

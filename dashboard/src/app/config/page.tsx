@@ -1,12 +1,18 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  PageHeader,
+  PageLoading,
+  SectionPanel,
+  PanelHeader,
+  PanelBody,
+} from "@/components/layout";
 import {
   getBotConfig,
   saveBotConfig,
@@ -333,25 +339,21 @@ export default function ConfigPage() {
 
   if (isLoading) {
     return (
-      <PageContainer>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="w-8 h-8 text-accent animate-spin" />
-        </div>
+      <PageContainer className="max-w-[1400px]">
+        <PageLoading label="Loading configuration…" />
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer>
-      {/* Header */}
+    <PageContainer className="max-w-[1400px]">
       <AnimatedSection>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-text-primary tracking-tight">Configuration</h1>
-            <p className="text-sm text-text-muted mt-1">Bot settings and runtime presets</p>
-          </div>
-
-          <div className="flex items-center gap-3">
+        <PageHeader
+          meta="Setup"
+          title="Configuration"
+          description="Bot settings and runtime presets"
+          actions={
+            <>
             {/* Preset Selector */}
             <div className="relative">
               <button
@@ -424,8 +426,9 @@ export default function ConfigPage() {
               )}
               <span className="ml-2">Save</span>
             </Button>
-          </div>
-        </div>
+            </>
+          }
+        />
       </AnimatedSection>
 
       {/* Current Preset Badge */}
@@ -444,16 +447,15 @@ export default function ConfigPage() {
 
           return (
             <AnimatedSection key={section.title} className={`stagger-${idx + 1}`}>
-              <Card>
-                <CardHeader className={`bg-gradient-to-r ${colors.bg} to-transparent`}>
-                  <CardTitle className="flex items-center gap-3">
-                    <div className={`w-10 h-10 rounded-xl ${colors.bg} flex items-center justify-center`}>
-                      <span className={colors.text}>{section.icon}</span>
-                    </div>
-                    <span>{section.title}</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
+              <SectionPanel>
+                <PanelHeader
+                  eyebrow={section.title}
+                  title={section.title}
+                  action={
+                    <span className={colors.text}>{section.icon}</span>
+                  }
+                />
+                <PanelBody>
                   <div className="space-y-4">
                     {section.fields.map((field) => {
                       if (field.condition && !field.condition()) return null;
@@ -505,8 +507,8 @@ export default function ConfigPage() {
                       );
                     })}
                   </div>
-                </CardContent>
-              </Card>
+                </PanelBody>
+              </SectionPanel>
             </AnimatedSection>
           );
         })}
@@ -514,25 +516,15 @@ export default function ConfigPage() {
 
       {/* System Prompts Section */}
       <AnimatedSection>
-        <Card>
-          <CardHeader className="bg-gradient-to-r from-warning/10 to-transparent">
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
-                  <Brain className="w-5 h-5 text-warning" />
-                </div>
-                <div>
-                  <span>LLM System Prompts</span>
-                  <p className="text-xs text-text-muted font-normal mt-0.5">
-                    Controls how the AI parses trading signals. Changes take effect on next bot restart.
-                  </p>
-                </div>
-              </CardTitle>
-              <div className="flex items-center gap-2">
+        <SectionPanel>
+          <PanelHeader
+            eyebrow="LLM"
+            title="System prompts"
+            description="Controls how the AI parses trading signals. Changes apply on next bot restart."
+            action={
+              <div className="flex items-center gap-2 flex-wrap justify-end">
                 {(isCustomSystemPrompt || isCustomCorrectionPrompt) && (
-                  <Badge variant="default" className="bg-warning/20 text-warning border-warning/30">
-                    Customized
-                  </Badge>
+                  <Badge variant="warning">Customized</Badge>
                 )}
                 <Button
                   variant="ghost"
@@ -541,7 +533,7 @@ export default function ConfigPage() {
                   disabled={!isCustomSystemPrompt && !isCustomCorrectionPrompt}
                 >
                   <RotateCcw className="w-4 h-4" />
-                  <span className="ml-1">Reset to Defaults</span>
+                  <span className="ml-1">Reset</span>
                 </Button>
                 <Button
                   variant="secondary"
@@ -558,12 +550,12 @@ export default function ConfigPage() {
                   ) : (
                     <Save className="w-4 h-4" />
                   )}
-                  <span className="ml-1">Save Prompts</span>
+                  <span className="ml-1">Save prompts</span>
                 </Button>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
+            }
+          />
+          <PanelBody className="space-y-6">
             <Textarea
               label="Signal Parsing Prompt"
               value={systemPrompt}
@@ -596,8 +588,8 @@ export default function ConfigPage() {
                 Make sure to preserve these when editing.
               </p>
             </div>
-          </CardContent>
-        </Card>
+          </PanelBody>
+        </SectionPanel>
       </AnimatedSection>
 
       {/* Save As Preset Dialog */}

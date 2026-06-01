@@ -6,7 +6,7 @@ const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
     <div
       ref={ref}
       className={cn(
-        "rounded-2xl bg-bg-tertiary/70 backdrop-blur-xl border border-border-subtle shadow-lg",
+        "rounded-2xl border border-border-subtle bg-bg-secondary/50 overflow-hidden",
         className
       )}
       {...props}
@@ -19,7 +19,10 @@ const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("px-6 py-4 border-b border-border-subtle", className)}
+      className={cn(
+        "px-5 py-4 sm:px-6 sm:py-5 border-b border-border-subtle",
+        className
+      )}
       {...props}
     />
   )
@@ -40,18 +43,17 @@ CardTitle.displayName = "CardTitle";
 
 const CardContent = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
-    <div ref={ref} className={cn("px-6 py-5", className)} {...props} />
+    <div ref={ref} className={cn("p-5 sm:p-6", className)} {...props} />
   )
 );
 CardContent.displayName = "CardContent";
 
-// New component for glass effect cards
 const GlassCard = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
-        "glass-card-elevated p-5",
+        "rounded-2xl border border-border-subtle bg-bg-secondary/50 p-5",
         className
       )}
       {...props}

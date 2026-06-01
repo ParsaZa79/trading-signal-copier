@@ -95,7 +95,7 @@ export function ChannelSelector({
         </div>
 
         <div className="relative">
-          <div className="p-6 rounded-2xl bg-gradient-to-br from-bg-tertiary/80 to-bg-tertiary/40 border border-border-subtle text-center">
+          <div className="p-6 rounded-2xl bg-bg-secondary/50 border border-border-subtle text-center">
             <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-info/10 flex items-center justify-center">
               <Radio className="w-6 h-6 text-info" />
             </div>

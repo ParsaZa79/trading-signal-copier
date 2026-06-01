@@ -1,0 +1,682 @@
+{
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/start-linux.sh": {
+    "mtime": 1780144645.1217961,
+    "ast_hash": "55c325be16274e39246f5015c7baa129",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/postcss.config.mjs": {
+    "mtime": 1780144645.1142445,
+    "ast_hash": "239f3ebf717465dc636818a1a619398d",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/next-env.d.ts": {
+    "mtime": 1780288063.2079525,
+    "ast_hash": "2a74d3909800ca5467fa83b0ab4a4890",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/package.json": {
+    "mtime": 1780292838.346865,
+    "ast_hash": "df281f9b9143f6b0d04703f3b562c84b",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/tsconfig.json": {
+    "mtime": 1780144645.1215994,
+    "ast_hash": "ee17fd1c97c735e9f3564e3f5251f125",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/eslint.config.mjs": {
+    "mtime": 1780144645.1139114,
+    "ast_hash": "dfa1f5f6a7037bf39dc510f30b180002",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/next.config.ts": {
+    "mtime": 1780144645.1140306,
+    "ast_hash": "daad32b4de0b92afe04301ebf0a6cc76",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/types/index.ts": {
+    "mtime": 1780144645.1214879,
+    "ast_hash": "aa536a4e981cd1115b0a83e5cbe105d3",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/layout.tsx": {
+    "mtime": 1780293256.8109438,
+    "ast_hash": "50f16fe55bb97fe4e691a29640222231",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/page.tsx": {
+    "mtime": 1780288077.7376764,
+    "ast_hash": "614139375071319c83026707679733ab",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/template.tsx": {
+    "mtime": 1780144645.1171649,
+    "ast_hash": "59743f478a5484b33c5585a08306fc66",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/settings/page.tsx": {
+    "mtime": 1780288221.8116138,
+    "ast_hash": "2d91d14da78acb99fc0a7ccb4032f19a",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/analysis/page.tsx": {
+    "mtime": 1780288236.1395895,
+    "ast_hash": "23a22008fd348cfae5061a35a607ffd0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/config/page.tsx": {
+    "mtime": 1780288258.3687334,
+    "ast_hash": "80e0354d293411271c438bb65131cb67",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/history/page.tsx": {
+    "mtime": 1780292591.600518,
+    "ast_hash": "7cae8fa4ea5635c91009bde51a72b704",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/positions/page.tsx": {
+    "mtime": 1780292621.7460074,
+    "ast_hash": "fa0f7422cc29728ffbe4108b569878f8",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/bot/page.tsx": {
+    "mtime": 1780292605.2005038,
+    "ast_hash": "67ce6b2f134b9df79ec2272e8962fe64",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/app/orders/page.tsx": {
+    "mtime": 1780292598.5012279,
+    "ast_hash": "970191fc08f1dad638b9e4b446a92136",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/channel-selector.tsx": {
+    "mtime": 1780288265.2241757,
+    "ast_hash": "66dd9291e258af586846d416ea2e341b",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/tabs.tsx": {
+    "mtime": 1780288159.8072383,
+    "ast_hash": "c07dfda34ceec8f80b708e91c15ad4db",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/card.tsx": {
+    "mtime": 1780288159.0998516,
+    "ast_hash": "e16b7d04917e91723ad67b25c935cda2",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/dialog.tsx": {
+    "mtime": 1780144645.1199918,
+    "ast_hash": "2ba910a25e8d8c0f47076636752e0dba",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/badge.tsx": {
+    "mtime": 1780144645.11943,
+    "ast_hash": "8f6951310f8d2af36b9c7ebfe8c34e9a",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/button.tsx": {
+    "mtime": 1780288159.5412254,
+    "ast_hash": "c6368f8beb54028dd2116e9032e54f99",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/checkbox.tsx": {
+    "mtime": 1780144645.1198893,
+    "ast_hash": "214bc4342f1950a160c56aba58e4a820",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/select.tsx": {
+    "mtime": 1780144645.1202323,
+    "ast_hash": "5c2777be657d50c6e6f7f5a39b585bd0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/textarea.tsx": {
+    "mtime": 1780144645.1205783,
+    "ast_hash": "a57ca9c8201e758ac34d5f0f749909e6",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/ui/input.tsx": {
+    "mtime": 1780144645.1201267,
+    "ast_hash": "ee34ac4c81943e898d45ddab130b9a64",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/layout/sidebar.tsx": {
+    "mtime": 1780288031.6398473,
+    "ast_hash": "8dd5f377d92e50104e774ccee3ecc22b",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/layout/dashboard-layout.tsx": {
+    "mtime": 1780293038.878597,
+    "ast_hash": "e3b7e2fa5f10aeff04630ef9ecb5c4e4",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/motion/animated-section.tsx": {
+    "mtime": 1780144645.1187766,
+    "ast_hash": "5d48508351a726a18ecc420c97adfd73",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/motion/page-container.tsx": {
+    "mtime": 1780144645.1190338,
+    "ast_hash": "6ca8e335558e79f7d9a34be5d09f94c0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/motion/index.ts": {
+    "mtime": 1780144645.1189098,
+    "ast_hash": "565acb4fedd4b8ed439a3de56b9dc216",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/time-range-selector.tsx": {
+    "mtime": 1780287992.3868968,
+    "ast_hash": "ffc1cad4d96a57072a64ae37fe708d28",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/equity-chart.tsx": {
+    "mtime": 1780287995.3072205,
+    "ast_hash": "91a19c5bf51688576db1e636ecfce5ca",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/positions-summary.tsx": {
+    "mtime": 1780292576.7659485,
+    "ast_hash": "1b69085cc896725162eb3a4c1ae7908a",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/metric-card.tsx": {
+    "mtime": 1780288167.917485,
+    "ast_hash": "917ffe088f97abbf58b0419d73d5db42",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/pnl-badge.tsx": {
+    "mtime": 1780144645.1177356,
+    "ast_hash": "7fcdcca1ab53956ac236fde31961076a",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/account-card.tsx": {
+    "mtime": 1780288163.5228631,
+    "ast_hash": "a66da39fb8b63cd01481a83b4074294b",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/asset-breakdown.tsx": {
+    "mtime": 1780288006.2999468,
+    "ast_hash": "82283c84d48eda0c8530fadbb41687ef",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/performance-panel.tsx": {
+    "mtime": 1780288261.3486316,
+    "ast_hash": "dc615742604a3d1221796cacdb4eb2a4",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/modify-dialog.tsx": {
+    "mtime": 1780292577.2024899,
+    "ast_hash": "0174e495c8b486d89f98ac8e8fa79100",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/portfolio-hero.tsx": {
+    "mtime": 1780288000.3634908,
+    "ast_hash": "79c8fd0d229a5da39bf9b329d00061e1",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/connection-status.tsx": {
+    "mtime": 1780288161.3780131,
+    "ast_hash": "1ffb86c821c2582f3ea3b25385b523d7",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/positions-table.tsx": {
+    "mtime": 1780292570.044827,
+    "ast_hash": "ef83ee1780a99766d48cd61574c671e6",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/history/time-range-filter.tsx": {
+    "mtime": 1780288262.1961625,
+    "ast_hash": "aae1d9558568f47cfc61a8f66adcf35c",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/orders/order-form.tsx": {
+    "mtime": 1780288181.9218953,
+    "ast_hash": "4f78c97f12b19aa5defb60b9bd9b17e3",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/hooks/use-websocket.ts": {
+    "mtime": 1780144645.1207523,
+    "ast_hash": "bd6d008bd4b68313598fd3005c58645f",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/lib/utils.ts": {
+    "mtime": 1780144645.1212919,
+    "ast_hash": "3eb17bd67edb7f2cae3ffa6a51025365",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/lib/motion.ts": {
+    "mtime": 1780144645.1211812,
+    "ast_hash": "1af6b9c9f9f8abde782440895e7ddb97",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/lib/api.ts": {
+    "mtime": 1780144645.120925,
+    "ast_hash": "a5d64f42ee33bb6a51ad643b936cabbb",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/lib/constants.ts": {
+    "mtime": 1780144645.1210682,
+    "ast_hash": "60390134e2d01a8af2b0d6e00bb12c1e",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/config.py": {
+    "mtime": 1780144645.100157,
+    "ast_hash": "a5ca78048141a5d4cd9d5e1e96bc11d0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/symbol_utils.py": {
+    "mtime": 1780144645.103407,
+    "ast_hash": "ee0ab061ea1760a36f28472dbe8a3659",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/__init__.py": {
+    "mtime": 1780144645.100025,
+    "ast_hash": "bb4a528fc73ba2ca55c9e75c088fe8b8",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/runtime_data.py": {
+    "mtime": 1780144645.102199,
+    "ast_hash": "3f835cc1b21c547c50bef8b6c0cf5037",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/main.py": {
+    "mtime": 1780144645.1004505,
+    "ast_hash": "516ec9c0da8143e702e8dee34789f4d0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/dependencies.py": {
+    "mtime": 1780144645.1002913,
+    "ast_hash": "027387987203deebae69adce8e93798a",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/config.py": {
+    "mtime": 1780144645.1012428,
+    "ast_hash": "4da8716b86da149801da6a25aa3b2004",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/analysis.py": {
+    "mtime": 1780144645.1009543,
+    "ast_hash": "663c6318238ec9be58537f19296132dc",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/health.py": {
+    "mtime": 1780144645.1013765,
+    "ast_hash": "611fa535361503b3f6a56e18aec9e1ac",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/telegram.py": {
+    "mtime": 1780144645.102046,
+    "ast_hash": "57b14d4082e75dd2b65e9b5539798285",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/__init__.py": {
+    "mtime": 1780144645.1006598,
+    "ast_hash": "d1319767234dc681a42d8a6f4f03e626",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/orders.py": {
+    "mtime": 1780144645.1015146,
+    "ast_hash": "8685cb6adb203838eafe96c2bf3a349e",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/positions.py": {
+    "mtime": 1780144645.1016476,
+    "ast_hash": "f6407df091ec4789e740f0485d0d9539",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/prompts.py": {
+    "mtime": 1780144645.1017892,
+    "ast_hash": "b580a721bfc32e17e3430b178610c55b",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/symbols.py": {
+    "mtime": 1780144645.1019135,
+    "ast_hash": "7ebf6ede6cd743c0da0a3c3249d4a330",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/bot.py": {
+    "mtime": 1780144645.1010997,
+    "ast_hash": "5dc6859ac54c576ff6b247bc101c9f4b",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/routers/account.py": {
+    "mtime": 1780144645.1008105,
+    "ast_hash": "2814c219e3abf2142dcb0fdd113bf4d0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/websocket/__init__.py": {
+    "mtime": 1780144645.10359,
+    "ast_hash": "1e68c1f7f8a9224eacdd49cbc1d974e0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/websocket/log_manager.py": {
+    "mtime": 1780144645.1038692,
+    "ast_hash": "cb136ff8a68f83440d4af63b54f402ce",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/websocket/broadcaster.py": {
+    "mtime": 1780144645.1037228,
+    "ast_hash": "2feeaa49636e37abc06c326600c44fcd",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/websocket/manager.py": {
+    "mtime": 1780144645.1040285,
+    "ast_hash": "2b84157a01c7e828a55a998a49581a21",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/schemas/order.py": {
+    "mtime": 1780144645.1026728,
+    "ast_hash": "342ab596ecc9402c60a01b8e4dccf45c",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/schemas/__init__.py": {
+    "mtime": 1780144645.1024017,
+    "ast_hash": "06065989723ecf2411f3f65a1f8e67ed",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/schemas/position.py": {
+    "mtime": 1780144645.1028044,
+    "ast_hash": "5a5bc2258a9f78f30c36662c9e4c18a0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/schemas/account.py": {
+    "mtime": 1780144645.1025383,
+    "ast_hash": "3d8dca58e39a61d9bbb52fa135b3ac13",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/schemas/websocket.py": {
+    "mtime": 1780144645.1029315,
+    "ast_hash": "790cc30e4d33173ae5414e0c8a7ca635",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/services/history_service.py": {
+    "mtime": 1780144645.103259,
+    "ast_hash": "372df46abcabaf8a25ff6380a484d594",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/src/services/__init__.py": {
+    "mtime": 1780144645.1031275,
+    "ast_hash": "4785d2b563965958ed02f29164e6550c",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/run_gui.ps1": {
+    "mtime": 1780144645.107192,
+    "ast_hash": "3be0c25ad7724c78dc09cddac38f9fea",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/check_mt5.py": {
+    "mtime": 1780144645.1060617,
+    "ast_hash": "45fbc650291235edde8df2b006cd1e07",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/run_bot.ps1": {
+    "mtime": 1780144645.1068316,
+    "ast_hash": "64b789a82b0ec625093c98242785be75",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/run_bot.sh": {
+    "mtime": 1780144645.1069555,
+    "ast_hash": "7a3770906821840be6ac3695adef98dd",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/run_gui.sh": {
+    "mtime": 1780144645.1073022,
+    "ast_hash": "515a10fd9c97fea37d7ab286e64507a9",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/gui_app.py": {
+    "mtime": 1780144645.106452,
+    "ast_hash": "2b1f93393b16902fc172908689e8f97a",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/conftest.py": {
+    "mtime": 1780144645.1112556,
+    "ast_hash": "2514f0cab5a46c0fa2d71ea083707627",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/test_executor_partial_close.py": {
+    "mtime": 1780144645.1124015,
+    "ast_hash": "e4fdc1fce5341d9e55a7e1a8880c24d9",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/test_swing_trade_fixes.py": {
+    "mtime": 1780144645.1125515,
+    "ast_hash": "95e2907398da661e19566f653d8a3659",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/__init__.py": {
+    "mtime": 1780144645.1110647,
+    "ast_hash": "d41d8cd98f00b204e9800998ecf8427e",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/test_bot.py": {
+    "mtime": 1780144645.1122622,
+    "ast_hash": "c1bb92db80e38f21af350d153b5f24e8",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/integration/test_executor_integration.py": {
+    "mtime": 1780144645.1118238,
+    "ast_hash": "acce9213e25d49f09edf9b4f4381ac40",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/integration/conftest.py": {
+    "mtime": 1780144645.111666,
+    "ast_hash": "b20f8ac964152b24319b6a95f5027ad9",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/integration/__init__.py": {
+    "mtime": 1780144645.111515,
+    "ast_hash": "572a41ff38ef5885f1702cf4e17ea96c",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/integration/test_reconnection.py": {
+    "mtime": 1780144645.1121418,
+    "ast_hash": "bd7ec6d1d40c6a3bb973be181dd594d4",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/tests/integration/test_mt5_integration.py": {
+    "mtime": 1780144645.112013,
+    "ast_hash": "60f0c3148cb3f9a5f11797e7dc6d9cec",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/scripts/test_telegram.py": {
+    "mtime": 1780144645.1083207,
+    "ast_hash": "733342fa5d63c5333f903e655588badd",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/scripts/analyze_signals.py": {
+    "mtime": 1780144645.107504,
+    "ast_hash": "573e1236d10b5e289a695845b7186353",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/scripts/setup_telegram_session.py": {
+    "mtime": 1780144645.1079588,
+    "ast_hash": "b653f41bb43bb87931865cc59e2af73b",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/scripts/test_signal_parser.py": {
+    "mtime": 1780144645.108197,
+    "ast_hash": "bb9c79b46367260d0ad64f26e3aec544",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/scripts/report_signal_outcomes.py": {
+    "mtime": 1780144645.1077878,
+    "ast_hash": "2e240cdbe137e74b27a42ea70ca7e605",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/scripts/fetch_signals.py": {
+    "mtime": 1780144645.1076422,
+    "ast_hash": "89a77d32b1217588edccfe86efba2c25",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/scripts/test_profit_messages.py": {
+    "mtime": 1780144645.1080816,
+    "ast_hash": "386b489c59792d9e0de0d7c832a4c3d2",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/config.py": {
+    "mtime": 1780144645.1089365,
+    "ast_hash": "5883605d4fc39a478649728aa1b61d5f",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/models.py": {
+    "mtime": 1780144645.1100538,
+    "ast_hash": "ba150249b92113acad37753e8aea46a2",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/__init__.py": {
+    "mtime": 1780144645.108571,
+    "ast_hash": "3b287d90280b5b2e5d81eed70f8bdb45",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/strategy.py": {
+    "mtime": 1780144645.1109393,
+    "ast_hash": "6f37cf0d878371c166aa351fde9cbd80",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/parser.py": {
+    "mtime": 1780144645.1105647,
+    "ast_hash": "d47ae1e9d66a7f4549871cdaf6adffdd",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/bot.py": {
+    "mtime": 1780144645.1087909,
+    "ast_hash": "2dac1007db86776056707866274c6133",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/mt5_adapter.py": {
+    "mtime": 1780144645.1103008,
+    "ast_hash": "dfe13370f3766cc86e9ce20c66932404",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/executor.py": {
+    "mtime": 1780144645.109098,
+    "ast_hash": "227999c76d0b6655b9218582c60d4ab7",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/state.py": {
+    "mtime": 1780144645.1107674,
+    "ast_hash": "c8a7adb69cdb7c106f32a7683256507d",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/llm/cerebras_provider.py": {
+    "mtime": 1780144645.109602,
+    "ast_hash": "a2f075fe7a92239de17698cbaa909b14",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/llm/__init__.py": {
+    "mtime": 1780144645.1092944,
+    "ast_hash": "9c203ec263e16f6b4c7210a3a849e0f0",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/llm/factory.py": {
+    "mtime": 1780144645.1097639,
+    "ast_hash": "cfb94196823592eacea1dc6c91404a0d",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/llm/groq_provider.py": {
+    "mtime": 1780144645.1098933,
+    "ast_hash": "c9920ec68198e458f8fab394f45f45f7",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/src/tania_signal_copier/llm/base.py": {
+    "mtime": 1780144645.1094587,
+    "ast_hash": "a15540f8ac41bfdbf32223bc63672fa2",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/README.md": {
+    "mtime": 1780144645.0992053,
+    "ast_hash": "5dfe243a328a68f5fd8fe58d3bd46d07",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/README.md": {
+    "mtime": 1780144645.1134143,
+    "ast_hash": "d1034a91423ff9307d88f3971e6449c9",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/CLAUDE.md": {
+    "mtime": 1780144645.113293,
+    "ast_hash": "5383cf35c79ba087695c7653112b81a8",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/README.md": {
+    "mtime": 1780144645.0997083,
+    "ast_hash": "d7e4a76e16e5036ac370a267899c6495",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/api/CLAUDE.md": {
+    "mtime": 1780144645.0995786,
+    "ast_hash": "5f484ec5801795b6604825c4f9a17a48",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/.pre-commit-config.yaml": {
+    "mtime": 1780144645.105536,
+    "ast_hash": "7904003366d734d6118219833190005d",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/README.md": {
+    "mtime": 1780144645.1059399,
+    "ast_hash": "7311c5fd73e6d74585d39d82f2c35a0d",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/bot/CLAUDE.md": {
+    "mtime": 1780144645.105807,
+    "ast_hash": "85527041534f207662b5959c333c7e00",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/public/file.svg": {
+    "mtime": 1780144645.1144114,
+    "ast_hash": "d09f95206c3fa0bb9bd9fefabfd0ea71",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/public/vercel.svg": {
+    "mtime": 1780144645.1147475,
+    "ast_hash": "c0af2f507b369b085b35ef4bbe3bcf1e",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/public/next.svg": {
+    "mtime": 1780144645.1146352,
+    "ast_hash": "8e061864f388b47f33a1c3780831193e",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/public/globe.svg": {
+    "mtime": 1780144645.114524,
+    "ast_hash": "2aaafa6a49b6563925fe440891e32717",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/public/window.svg": {
+    "mtime": 1780144645.1148531,
+    "ast_hash": "a2760511c65806022ad20adf74370ff3",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/layout/empty-state.tsx": {
+    "mtime": 1780288151.7810752,
+    "ast_hash": "a6d5104328a6060500c85d642dcd5d8a",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/layout/section-panel.tsx": {
+    "mtime": 1780288154.57338,
+    "ast_hash": "71f8a56a607f502adbf60cf7b4586dad",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/layout/index.ts": {
+    "mtime": 1780288221.428287,
+    "ast_hash": "3784d67dd7ea05fd420de45a7a6f0b16",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/layout/page-header.tsx": {
+    "mtime": 1780288150.6472082,
+    "ast_hash": "9c57609ac140c5f99d87fba951b10146",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/components/dashboard/symbol-icon.tsx": {
+    "mtime": 1780292888.3201094,
+    "ast_hash": "72268f99f6e575afda37b15943ef690b",
+    "semantic_hash": ""
+  },
+  "/Users/parsa/Documents/Projects/Personal/trading-signal-copier/dashboard/src/lib/symbol-icon-resolver.ts": {
+    "mtime": 1780292890.5182426,
+    "ast_hash": "0fbe0fe8fb6541eb6327ff0072d7dfe5",
+    "semantic_hash": ""
+  }
+}

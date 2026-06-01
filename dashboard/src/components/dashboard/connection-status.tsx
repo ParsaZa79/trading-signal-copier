@@ -20,31 +20,28 @@ export function ConnectionStatus({
   return (
     <div
       className={cn(
-        "flex items-center justify-between p-4 rounded-lg mb-6",
-        isConnected ? "bg-yellow-50 border border-yellow-200" : "bg-red-50 border border-red-200"
+        "flex items-center justify-between p-4 rounded-xl border mb-6",
+        isConnected
+          ? "bg-warning/10 border-warning/20"
+          : "bg-danger/10 border-danger/20"
       )}
     >
       <div className="flex items-center gap-3">
         {isConnected ? (
-          <Wifi className="w-5 h-5 text-yellow-600" />
+          <Wifi className="w-5 h-5 text-warning" />
         ) : (
-          <WifiOff className="w-5 h-5 text-red-600" />
+          <WifiOff className="w-5 h-5 text-danger" />
         )}
         <div>
           <p
             className={cn(
-              "font-medium",
-              isConnected ? "text-yellow-800" : "text-red-800"
+              "text-sm font-medium",
+              isConnected ? "text-warning" : "text-danger"
             )}
           >
-            {isConnected ? "Connection Issue" : "Disconnected"}
+            {isConnected ? "Connection issue" : "Disconnected"}
           </p>
-          <p
-            className={cn(
-              "text-sm",
-              isConnected ? "text-yellow-600" : "text-red-600"
-            )}
-          >
+          <p className="text-xs text-text-muted">
             {error || "Unable to connect to trading server"}
           </p>
         </div>

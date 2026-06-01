@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useEffect, useMemo, Fragment } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { GlassCard } from "@/components/ui/card";
+import { PageHeader, SectionPanel, PanelHeader, PanelBody, EmptyState } from "@/components/layout";
+import { MetricCard } from "@/components/dashboard/metric-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PnlBadge } from "@/components/dashboard/pnl-badge";
@@ -25,6 +25,7 @@ import {
   BarChart3,
   Calendar,
 } from "lucide-react";
+import { SymbolCell } from "@/components/dashboard/symbol-icon";
 import { PageContainer, AnimatedSection } from "@/components/motion";
 
 type GroupingMode = "none" | "day" | "week";
@@ -164,16 +165,7 @@ function TradeRow({ trade }: { trade: TradeHistoryEntry }) {
   return (
     <tr className="border-b border-border-subtle last:border-0 group">
       <td className="px-6 py-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-bg-tertiary flex items-center justify-center">
-            <span className="text-xs font-semibold text-accent">
-              {trade.symbol.slice(0, 2)}
-            </span>
-          </div>
-          <span className="font-medium text-text-primary text-sm">
-            {trade.symbol}
-          </span>
-        </div>
+        <SymbolCell symbol={trade.symbol} size="sm" />
       </td>
       <td className="px-6 py-4">
         <Badge
@@ -380,144 +372,108 @@ export default function HistoryPage() {
   const winningTrades = trades.filter((t) => t.profit > 0).length;
 
   return (
-    <PageContainer>
-      {/* Page Header */}
-      <AnimatedSection className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-text-primary tracking-tight">
-            Trade History
-          </h1>
-          <p className="text-sm text-text-muted mt-1">
-            View your closed trades and performance
-          </p>
-        </div>
-        <TimeRangeFilter
-          value={timePreset}
-          dateRange={dateRange}
-          onChange={handleTimeRangeChange}
+    <PageContainer className="max-w-[1400px]">
+      <AnimatedSection>
+        <PageHeader
+          meta="Performance"
+          title="Trade history"
+          description="Closed trades and realized P&L"
+          actions={
+            <TimeRangeFilter
+              value={timePreset}
+              dateRange={dateRange}
+              onChange={handleTimeRangeChange}
+            />
+          }
         />
       </AnimatedSection>
 
-      {/* Stats */}
       <AnimatedSection className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <GlassCard className="group hover:border-accent/20">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center">
-              <BarChart3 className="w-5 h-5 text-accent" />
-            </div>
-          </div>
-          <p className="text-xs text-text-muted mb-1">Total Trades</p>
-          <p className="text-2xl font-semibold text-text-primary tabular-nums">
-            {total}
-          </p>
-        </GlassCard>
-
-        <GlassCard className="group hover:border-success/20">
-          <div className="flex items-start justify-between mb-3">
-            <div className="w-10 h-10 rounded-xl bg-success/10 border border-success/20 flex items-center justify-center">
-              <Target className="w-5 h-5 text-success" />
-            </div>
-          </div>
-          <p className="text-xs text-text-muted mb-1">Win Rate</p>
-          <p className="text-2xl font-semibold text-success tabular-nums">
-            {trades.length > 0
+        <MetricCard
+          label="Total trades"
+          value={String(total)}
+          icon={<BarChart3 className="w-5 h-5" />}
+          accent="accent"
+        />
+        <MetricCard
+          label="Win rate"
+          value={`${
+            trades.length > 0
               ? ((winningTrades / trades.length) * 100).toFixed(1)
-              : 0}
-            %
-          </p>
-        </GlassCard>
-
-        <GlassCard
-          className={`group ${
-            totalProfit >= 0
-              ? "hover:border-success/20"
-              : "hover:border-danger/20"
-          }`}
-        >
-          <div className="flex items-start justify-between mb-3">
-            <div
-              className={`w-10 h-10 rounded-xl flex items-center justify-center ${
-                totalProfit >= 0
-                  ? "bg-success/10 border border-success/20"
-                  : "bg-danger/10 border border-danger/20"
-              }`}
-            >
-              {totalProfit >= 0 ? (
-                <TrendingUp className="w-5 h-5 text-success" />
-              ) : (
-                <TrendingDown className="w-5 h-5 text-danger" />
-              )}
-            </div>
-          </div>
-          <p className="text-xs text-text-muted mb-1">Page P&L</p>
-          <p
-            className={`text-2xl font-semibold tabular-nums ${
-              totalProfit >= 0 ? "text-success" : "text-danger"
-            }`}
-          >
-            {totalProfit >= 0 ? "+" : ""}
-            {formatCurrency(totalProfit)}
-          </p>
-        </GlassCard>
+              : 0
+          }%`}
+          icon={<Target className="w-5 h-5" />}
+          accent="success"
+        />
+        <MetricCard
+          label="Page P&L"
+          value={`${totalProfit >= 0 ? "+" : ""}${formatCurrency(totalProfit)}`}
+          icon={
+            totalProfit >= 0 ? (
+              <TrendingUp className="w-5 h-5" />
+            ) : (
+              <TrendingDown className="w-5 h-5" />
+            )
+          }
+          accent={totalProfit >= 0 ? "success" : "danger"}
+        />
       </AnimatedSection>
 
-      {/* History Table */}
       <AnimatedSection>
-        <Card>
-        <CardHeader className="flex flex-row items-center justify-between bg-bg-tertiary/30">
-          <div className="flex items-center gap-3">
-            <CardTitle>Closed Trades</CardTitle>
-            {groupingMode !== "none" && (
-              <Badge variant="default" size="sm">
-                Grouped by {groupingMode === "day" ? "Day" : "Week"}
-              </Badge>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page === 1 || isLoading}
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-sm text-text-secondary tabular-nums px-2">
-              {page} / {totalPages || 1}
+        <SectionPanel>
+        <PanelHeader
+          eyebrow="History"
+          title={
+            <span className="inline-flex items-center gap-2">
+              Closed trades
+              {groupingMode !== "none" && (
+                <Badge variant="default" size="sm">
+                  Grouped by {groupingMode === "day" ? "day" : "week"}
+                </Badge>
+              )}
             </span>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages || isLoading}
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
+          }
+          action={
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page === 1 || isLoading}
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </Button>
+              <span className="text-sm text-text-secondary tabular-nums px-2">
+                {page} / {totalPages || 1}
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages || isLoading}
+              >
+                <ChevronRight className="w-4 h-4" />
+              </Button>
+            </div>
+          }
+        />
+        <PanelBody flush>
           {isLoading ? (
-            <div className="py-16 text-center">
-              <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-bg-tertiary flex items-center justify-center animate-pulse">
-                <History className="w-6 h-6 text-text-muted" />
-              </div>
-              <p className="text-text-muted">Loading trade history...</p>
-            </div>
+            <EmptyState
+              icon={<History className="w-5 h-5 animate-pulse" />}
+              title="Loading trade history…"
+            />
           ) : trades.length === 0 ? (
-            <div className="py-16 text-center">
-              <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-bg-tertiary flex items-center justify-center">
-                <History className="w-6 h-6 text-text-muted" />
-              </div>
-              <p className="text-text-secondary mb-1">No trade history</p>
-              <p className="text-sm text-text-muted">
-                Your closed trades will appear here
-              </p>
-            </div>
+            <EmptyState
+              icon={<History className="w-5 h-5" />}
+              title="No trade history"
+              description="Your closed trades will appear here"
+            />
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full data-table">
                 <thead>
-                  <tr className="border-b border-border-subtle">
+                  <tr className="border-b border-border-subtle bg-bg-tertiary/30">
                     <th className="px-6 py-3 text-left">Symbol</th>
                     <th className="px-6 py-3 text-left">Type</th>
                     <th className="px-6 py-3 text-right">Volume</th>
@@ -554,8 +510,8 @@ export default function HistoryPage() {
               </table>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </PanelBody>
+      </SectionPanel>
       </AnimatedSection>
     </PageContainer>
   );

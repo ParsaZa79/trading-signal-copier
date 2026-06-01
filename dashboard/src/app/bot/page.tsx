@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -32,6 +31,17 @@ import {
   Check,
 } from "lucide-react";
 import { PageContainer, AnimatedSection } from "@/components/motion";
+import {
+  PageHeader,
+  PageLoading,
+  SectionPanel,
+  PanelHeader,
+  PanelBody,
+  TerminalPanel,
+  EmptyState,
+} from "@/components/layout";
+import { MetricCard } from "@/components/dashboard/metric-card";
+import { SymbolCell } from "@/components/dashboard/symbol-icon";
 import type { TrackedPosition } from "@/types";
 
 const IS_MACOS = typeof window !== "undefined" && navigator.platform.includes("Mac");
@@ -314,56 +324,47 @@ export default function BotControlPage() {
 
   if (isLoading) {
     return (
-      <PageContainer>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="w-8 h-8 text-accent animate-spin" />
-        </div>
+      <PageContainer className="max-w-[1400px]">
+        <PageLoading label="Loading bot status…" />
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer>
-      {/* Header */}
+    <PageContainer className="max-w-[1400px]">
       <AnimatedSection>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-text-primary tracking-tight">Bot Control</h1>
-            <p className="text-sm text-text-muted mt-1">Start, stop, and monitor the signal copier bot</p>
-          </div>
-
-          <div className="flex items-center gap-3">
+        <PageHeader
+          meta="Automation"
+          title="Bot control"
+          description="Start, stop, and monitor the signal copier bot"
+          actions={
             <Button variant="ghost" size="icon" onClick={fetchStatus}>
               <RefreshCw className="w-4 h-4" />
             </Button>
-          </div>
-        </div>
+          }
+        />
       </AnimatedSection>
 
-      {/* Main Control Card */}
       <AnimatedSection>
-        <Card className="overflow-hidden">
-          <CardHeader className="bg-gradient-to-r from-accent/15 to-transparent">
-            <CardTitle className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-accent/20 flex items-center justify-center">
-                <Bot className="w-6 h-6 text-accent" />
-              </div>
-              <div>
-                <span>Signal Copier Bot</span>
-                <div className="flex items-center gap-2 mt-1">
-                  {getStatusIcon(status)}
-                  <Badge variant={getStatusColor(status)} className="capitalize">
-                    {status}
-                  </Badge>
-                  {pid && (
-                    <span className="text-xs text-text-muted">PID: {pid}</span>
-                  )}
-                </div>
-              </div>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="p-6">
+        <SectionPanel>
+          <PanelHeader
+            eyebrow="Signal copier"
+            title={
+              <span className="inline-flex items-center gap-2">
+                Bot status
+                <Badge variant={getStatusColor(status)} className="capitalize">
+                  {status}
+                </Badge>
+                {pid && (
+                  <span className="text-xs font-normal text-text-muted">
+                    PID {pid}
+                  </span>
+                )}
+              </span>
+            }
+            action={getStatusIcon(status)}
+          />
+          <PanelBody>
             {/* Error Display */}
             {error && (
               <div className="mb-6 p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger text-sm">
@@ -423,27 +424,40 @@ export default function BotControlPage() {
             {/* Status Info */}
             {status === "running" && startedAt && (
               <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-                <StatusCard icon={<Clock className="w-5 h-5" />} label="Started" value={new Date(startedAt).toLocaleString()} />
-                <StatusCard icon={<Server className="w-5 h-5" />} label="Process ID" value={String(pid || "-")} />
-                <StatusCard icon={<CheckCircle className="w-5 h-5" />} label="Status" value="Healthy" color="success" />
+                <MetricCard
+                  label="Started"
+                  value={new Date(startedAt).toLocaleString()}
+                  icon={<Clock className="w-5 h-5" />}
+                />
+                <MetricCard
+                  label="Process ID"
+                  value={String(pid || "-")}
+                  icon={<Server className="w-5 h-5" />}
+                  accent="info"
+                />
+                <MetricCard
+                  label="Health"
+                  value="Healthy"
+                  icon={<CheckCircle className="w-5 h-5" />}
+                  accent="success"
+                />
               </div>
             )}
-          </CardContent>
-        </Card>
+          </PanelBody>
+        </SectionPanel>
       </AnimatedSection>
 
-      {/* Tracked Positions */}
       <AnimatedSection>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-info/20 flex items-center justify-center">
-                  <Activity className="w-5 h-5 text-info" />
-                </div>
-                <span>Tracked Positions</span>
+        <SectionPanel>
+          <PanelHeader
+            eyebrow="Tracking"
+            title={
+              <span className="inline-flex items-center gap-2">
+                Tracked positions
                 <Badge variant="default">{positionsStats.total}</Badge>
-              </div>
+              </span>
+            }
+            action={
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="sm" onClick={fetchPositions}>
                   <RefreshCw className="w-4 h-4" />
@@ -458,15 +472,14 @@ export default function BotControlPage() {
                   Clear
                 </Button>
               </div>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="p-0">
+            }
+          />
+          <PanelBody flush>
             {positions.length === 0 ? (
-              <div className="p-8 text-center text-text-muted">
-                <Activity className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>No tracked positions</p>
-              </div>
+              <EmptyState
+                icon={<Activity className="w-5 h-5" />}
+                title="No tracked positions"
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full data-table">
@@ -488,7 +501,9 @@ export default function BotControlPage() {
                       <tr key={`${pos.msg_id}-${pos.role}-${idx}`} className="border-b border-border-subtle">
                         <td className="px-4 py-3 text-text-secondary tabular-nums">{pos.msg_id}</td>
                         <td className="px-4 py-3 text-text-primary tabular-nums">{pos.mt5_ticket || "-"}</td>
-                        <td className="px-4 py-3 font-medium text-text-primary">{pos.symbol}</td>
+                        <td className="px-4 py-3">
+                          <SymbolCell symbol={pos.symbol} size="sm" />
+                        </td>
                         <td className="px-4 py-3">
                           <Badge
                             variant={pos.role === "scalp" ? "default" : pos.role === "runner" ? "warning" : "default"}
@@ -526,27 +541,25 @@ export default function BotControlPage() {
                 )}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </PanelBody>
+        </SectionPanel>
       </AnimatedSection>
 
-      {/* Log Output */}
       <AnimatedSection>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-warning/20 flex items-center justify-center">
-                  <FileText className="w-5 h-5 text-warning" />
-                </div>
-                <span>Output Log</span>
+        <SectionPanel>
+          <PanelHeader
+            eyebrow="Terminal"
+            title={
+              <span className="inline-flex items-center gap-2">
+                Output log
                 {wsConnected && (
                   <Badge variant="success" className="text-xs">
-                    <span className="w-1.5 h-1.5 rounded-full bg-success mr-1.5 animate-pulse" />
                     Live
                   </Badge>
                 )}
-              </div>
+              </span>
+            }
+            action={
               <div className="flex items-center gap-2">
                 <Button
                   variant="ghost"
@@ -562,7 +575,6 @@ export default function BotControlPage() {
                   size="sm"
                   onClick={() => {
                     setLogs([]);
-                    // Also clear server-side buffer
                     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                       wsRef.current.send("clear");
                     }
@@ -571,83 +583,50 @@ export default function BotControlPage() {
                   Clear
                 </Button>
               </div>
-            </CardTitle>
-          </CardHeader>
+            }
+          />
+          <TerminalPanel>
+            {logs.length === 0 ? (
+              <div className="text-text-muted text-center py-8">
+                {wsConnected ? "Waiting for bot output…" : "Connecting to log stream…"}
+              </div>
+            ) : (
+              logs.map((log) => {
+                const time = log.timestamp.includes("T")
+                  ? new Date(log.timestamp).toLocaleTimeString()
+                  : log.timestamp;
 
-          <CardContent className="p-0">
-            <div className="h-96 overflow-y-auto p-4 bg-bg-primary font-mono text-xs">
-              {logs.length === 0 ? (
-                <div className="text-text-muted text-center py-8">
-                  {wsConnected ? "Waiting for bot output..." : "Connecting to log stream..."}
-                </div>
-              ) : (
-                logs.map((log) => {
-                  // Format timestamp - handle both ISO format and local time string
-                  const time = log.timestamp.includes("T")
-                    ? new Date(log.timestamp).toLocaleTimeString()
-                    : log.timestamp;
-
-                  return (
-                    <div
-                      key={log.id}
-                      className={`py-1 ${
-                        log.level === "error"
-                          ? "text-danger"
-                          : log.level === "warning"
-                            ? "text-warning"
-                            : "text-text-secondary"
-                      }`}
-                    >
-                      <span className="text-text-muted">[{time}]</span> {log.message}
-                    </div>
-                  );
-                })
-              )}
-              <div ref={logEndRef} />
-            </div>
-          </CardContent>
-        </Card>
+                return (
+                  <div
+                    key={log.id}
+                    className={`py-1 ${
+                      log.level === "error"
+                        ? "text-danger"
+                        : log.level === "warning"
+                          ? "text-warning"
+                          : "text-text-secondary"
+                    }`}
+                  >
+                    <span className="text-text-muted">[{time}]</span> {log.message}
+                  </div>
+                );
+              })
+            )}
+            <div ref={logEndRef} />
+          </TerminalPanel>
+        </SectionPanel>
       </AnimatedSection>
 
-      {/* Tips */}
       <AnimatedSection>
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-bg-tertiary/50 border border-border-subtle">
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-bg-secondary/50 border border-border-subtle">
           <Zap className="w-5 h-5 text-accent flex-shrink-0" />
           <p className="text-sm text-text-muted">
-            <span className="font-medium text-text-secondary">Tip:</span> The bot will automatically reconnect
-            if the connection is lost. Check the Configuration page to update your settings.
+            <span className="font-medium text-text-secondary">Tip:</span> The bot
+            reconnects automatically if the connection drops. Update settings on
+            the Configuration page.
           </p>
         </div>
       </AnimatedSection>
     </PageContainer>
-  );
-}
-
-function StatusCard({
-  icon,
-  label,
-  value,
-  color = "default",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  color?: "default" | "success" | "danger" | "warning";
-}) {
-  const colorStyles = {
-    default: "text-text-primary",
-    success: "text-success",
-    danger: "text-danger",
-    warning: "text-warning",
-  };
-
-  return (
-    <div className="p-4 rounded-xl bg-bg-tertiary/50 border border-border-subtle">
-      <div className="flex items-center gap-2 text-text-muted mb-1">
-        {icon}
-        <span className="text-xs uppercase tracking-wide">{label}</span>
-      </div>
-      <p className={`text-lg font-semibold ${colorStyles[color]}`}>{value}</p>
-    </div>
   );
 }

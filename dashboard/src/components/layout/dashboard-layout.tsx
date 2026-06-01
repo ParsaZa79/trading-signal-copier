@@ -6,6 +6,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 import type { Position, AccountInfo } from "@/types";
 import { Bell, Search, ChevronDown } from "lucide-react";
 import { getSymbolPrice } from "@/lib/api";
+import { SymbolIcon } from "@/components/dashboard/symbol-icon";
 
 interface PriceData {
   symbol: string;
@@ -99,15 +100,25 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
         <div className="flex-1 flex flex-col min-h-screen">
           {/* Top Header Bar */}
-          <header className="h-16 border-b border-border-subtle bg-bg-secondary/30 backdrop-blur-xl sticky top-0 z-40">
-            <div className="h-full px-6 flex items-center justify-between">
-              {/* Search */}
-              <div className="relative">
+          <header className="h-14 border-b border-border-subtle bg-bg-primary/70 backdrop-blur-xl sticky top-0 z-40">
+            <div className="h-full px-4 lg:px-6 flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-text-primary truncate">
+                  Portfolio
+                </p>
+                <p className="text-[11px] text-text-muted truncate hidden sm:block">
+                  {isConnected
+                    ? "Markets active · Live MT5 feed"
+                    : "Waiting for MT5 connection"}
+                </p>
+              </div>
+
+              <div className="relative hidden md:block flex-1 max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
                 <input
                   type="text"
-                  placeholder="Search Any Things"
-                  className="w-72 h-10 pl-10 pr-4 rounded-xl bg-bg-tertiary border border-border-subtle text-sm text-text-primary placeholder:text-text-muted focus:border-accent/30 focus:ring-0 transition-colors"
+                  placeholder="Search symbols, tickets..."
+                  className="w-full h-9 pl-10 pr-14 rounded-xl bg-bg-tertiary/80 border border-border-subtle text-sm text-text-primary placeholder:text-text-muted focus:border-border-default focus:ring-0 transition-colors"
                 />
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle">
                   <span className="text-[10px] text-text-muted font-mono">⌘K</span>
@@ -118,19 +129,26 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <div className="flex items-center gap-4">
                 {/* Market Status Pills */}
                 <div className="hidden lg:flex items-center gap-3">
-                  {HEADER_SYMBOLS.map((sym, idx) => {
+                  {HEADER_SYMBOLS.map((sym) => {
                     const price = headerPrices[sym.base];
-                    const colors: Array<"accent" | "success" | "danger"> = ["accent", "success", "danger"];
-                    const color = colors[idx % colors.length];
 
                     if (!price) {
                       return (
                         <div
                           key={sym.base}
-                          className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border-subtle bg-bg-tertiary animate-pulse"
+                          className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border-subtle bg-bg-tertiary/80"
                         >
-                          <span className="text-xs font-semibold text-text-muted">{sym.label}</span>
-                          <span className="text-xs text-text-muted">---</span>
+                          <SymbolIcon
+                            symbol={sym.base}
+                            size="sm"
+                            className="w-7 h-7 rounded-md"
+                          />
+                          <span className="text-xs font-medium text-text-secondary">
+                            {sym.label}
+                          </span>
+                          <span className="text-xs text-text-muted tabular-nums animate-pulse">
+                            ---
+                          </span>
                         </div>
                       );
                     }
@@ -143,39 +161,37 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                       <MarketPill
                         key={sym.base}
                         symbol={sym.label}
+                        iconSymbol={sym.base}
                         value={price.bid.toFixed(price.bid > 100 ? 2 : 5)}
                         change={change}
-                        color={color}
                       />
                     );
                   })}
                 </div>
 
                 {/* Notifications */}
-                <button className="relative w-10 h-10 rounded-xl bg-bg-tertiary border border-border-subtle flex items-center justify-center hover:border-accent/30 transition-colors">
+                <button className="relative w-9 h-9 rounded-xl bg-bg-tertiary/80 border border-border-subtle flex items-center justify-center hover:bg-bg-elevated transition-colors">
                   <Bell className="w-4 h-4 text-text-secondary" />
-                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-accent rounded-full flex items-center justify-center">
-                    <span className="text-[9px] font-bold text-bg-primary">3</span>
-                  </span>
+                  {isConnected && (
+                    <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-success rounded-full" />
+                  )}
                 </button>
 
-                {/* User */}
-                <button className="flex items-center gap-3 pl-3 pr-2 py-1.5 rounded-xl bg-bg-tertiary border border-border-subtle hover:border-accent/30 transition-colors">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent to-accent-dark flex items-center justify-center">
-                    <span className="text-xs font-bold text-bg-primary">TA</span>
+                <button className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-xl bg-bg-tertiary/80 border border-border-subtle hover:bg-bg-elevated transition-colors">
+                  <div className="w-7 h-7 rounded-lg bg-bg-elevated border border-border-default flex items-center justify-center">
+                    <span className="text-[10px] font-semibold text-text-primary">SC</span>
                   </div>
-                  <div className="text-left hidden sm:block">
-                    <p className="text-sm font-medium text-text-primary">Tania</p>
-                    <p className="text-[10px] text-text-muted">Admin</p>
+                  <div className="text-left hidden lg:block">
+                    <p className="text-xs font-medium text-text-primary">Trader</p>
                   </div>
-                  <ChevronDown className="w-4 h-4 text-text-muted" />
+                  <ChevronDown className="w-3.5 h-3.5 text-text-muted hidden lg:block" />
                 </button>
               </div>
             </div>
           </header>
 
           {/* Main Content */}
-          <main className="flex-1 p-6 overflow-auto">
+          <main className="flex-1 p-4 lg:p-6 overflow-auto">
             {/* Connection Error Banner */}
             {error && (
               <div className="mb-6 p-4 rounded-xl bg-danger/10 border border-danger/30 flex items-center justify-between animate-fade-in">
@@ -207,36 +223,25 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 // Market status pill component
 function MarketPill({
   symbol,
+  iconSymbol,
   value,
   change,
-  color,
 }: {
   symbol: string;
+  iconSymbol: string;
   value: string;
   change: number;
-  color: "success" | "danger" | "accent";
 }) {
   const isPositive = change >= 0;
 
-  const colorStyles = {
-    success: "border-success/40 bg-success/10",
-    danger: "border-danger/40 bg-danger/10",
-    accent: "border-accent/40 bg-accent/10",
-  };
-
-  const textColor = {
-    success: "text-success",
-    danger: "text-danger",
-    accent: "text-accent",
-  };
-
   return (
-    <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${colorStyles[color]}`}>
-      <span className={`text-xs font-semibold ${textColor[color]}`}>{symbol}</span>
+    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-border-subtle bg-bg-tertiary/80">
+      <SymbolIcon symbol={iconSymbol} size="sm" className="w-7 h-7 rounded-md" />
+      <span className="text-xs font-medium text-text-secondary">{symbol}</span>
       <span className="text-xs font-medium text-text-primary tabular-nums">{value}</span>
       <span
-        className={`text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded ${
-          isPositive ? "bg-success/25 text-success" : "bg-danger/25 text-danger"
+        className={`text-[10px] font-semibold tabular-nums px-1.5 py-0.5 rounded ${
+          isPositive ? "bg-success/15 text-success" : "bg-danger/15 text-danger"
         }`}
       >
         {isPositive ? "↑" : "↓"} {Math.abs(change).toFixed(2)}%

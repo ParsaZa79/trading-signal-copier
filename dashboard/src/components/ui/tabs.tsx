@@ -85,8 +85,8 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
       className={cn(
         "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200",
         isSelected
-          ? "bg-accent text-bg-primary shadow-lg shadow-accent/20"
-          : "text-text-secondary hover:text-text-primary hover:bg-bg-elevated",
+          ? "bg-bg-elevated text-text-primary border border-border-default shadow-sm"
+          : "text-text-muted hover:text-text-secondary",
         className
       )}
     >

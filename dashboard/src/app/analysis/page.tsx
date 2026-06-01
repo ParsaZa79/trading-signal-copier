@@ -1,10 +1,19 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { MetricCard } from "@/components/dashboard/metric-card";
+import { PerformancePanel } from "@/components/dashboard/performance-panel";
+import {
+  PageHeader,
+  PageLoading,
+  SectionPanel,
+  PanelHeader,
+  PanelBody,
+  EmptyState,
+} from "@/components/layout";
 import { getAnalysisSummary, runAnalysis } from "@/lib/api";
 import {
   BarChart3,
@@ -126,10 +135,8 @@ export default function AnalysisPage() {
 
   if (isLoading) {
     return (
-      <PageContainer>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <Loader2 className="w-8 h-8 text-accent animate-spin" />
-        </div>
+      <PageContainer className="max-w-[1400px]">
+        <PageLoading label="Loading analysis…" />
       </PageContainer>
     );
   }
@@ -137,34 +144,24 @@ export default function AnalysisPage() {
   const isRunning = isFetching || isGenerating;
 
   return (
-    <PageContainer>
-      {/* Header */}
+    <PageContainer className="max-w-[1400px]">
       <AnimatedSection>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-text-primary tracking-tight">Signal Analysis</h1>
-            <p className="text-sm text-text-muted mt-1">Fetch messages and analyze signal outcomes</p>
-          </div>
-
-          <Button variant="ghost" size="icon" onClick={loadSummary}>
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-        </div>
+        <PageHeader
+          meta="Research"
+          title="Signal analysis"
+          description="Fetch Telegram messages and analyze signal outcomes"
+          actions={
+            <Button variant="ghost" size="icon" onClick={loadSummary}>
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          }
+        />
       </AnimatedSection>
 
-      {/* Controls */}
       <AnimatedSection>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-accent/20 flex items-center justify-center">
-                <Download className="w-5 h-5 text-accent" />
-              </div>
-              <span>Fetch & Analyze</span>
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="p-6">
+        <SectionPanel>
+          <PanelHeader eyebrow="Pipeline" title="Fetch & analyze" />
+          <PanelBody>
             <div className="flex flex-wrap items-end gap-4">
               <div className="w-24">
                 <Input
@@ -239,23 +236,19 @@ export default function AnalysisPage() {
 
             {/* Output */}
             {output && (
-              <div className="mt-4 p-4 rounded-xl bg-bg-primary border border-border-subtle font-mono text-xs max-h-48 overflow-y-auto whitespace-pre-wrap">
+              <div className="mt-4 p-4 rounded-xl bg-[#070708] border border-border-subtle font-mono text-xs max-h-48 overflow-y-auto whitespace-pre-wrap text-text-secondary">
                 {output}
               </div>
             )}
-          </CardContent>
-        </Card>
+          </PanelBody>
+        </SectionPanel>
       </AnimatedSection>
 
-      {/* Summary Header */}
       <AnimatedSection>
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-accent" />
-            Outcome Summary
-          </h2>
+        <div className="flex items-center justify-between mb-1">
+          <h2 className="text-sm font-semibold text-text-primary">Outcome summary</h2>
           {summary?.date_range && (
-            <Badge variant="default" className="bg-bg-tertiary">
+            <Badge variant="default">
               <Calendar className="w-3 h-3 mr-1" />
               {summary.date_range.start} to {summary.date_range.end}
             </Badge>
@@ -269,46 +262,46 @@ export default function AnalysisPage() {
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <AnimatedSection className="stagger-1">
               <MetricCard
-                label="Total Signals"
+                label="Total signals"
                 value={summary.total_signals.toString()}
                 icon={<BarChart3 className="w-5 h-5" />}
-                color="accent"
+                accent="accent"
               />
             </AnimatedSection>
 
             <AnimatedSection className="stagger-2">
               <MetricCard
-                label="Win Rate"
+                label="Win rate"
                 value={`${summary.win_rate.toFixed(1)}%`}
                 icon={<TrendingUp className="w-5 h-5" />}
-                color="success"
+                accent="success"
               />
             </AnimatedSection>
 
             <AnimatedSection className="stagger-3">
               <MetricCard
-                label="TP2 Hit"
+                label="TP2 hit"
                 value={summary.tp2_hit.toString()}
                 icon={<Target className="w-5 h-5" />}
-                color="success"
+                accent="success"
               />
             </AnimatedSection>
 
             <AnimatedSection className="stagger-4">
               <MetricCard
-                label="TP1 Hit"
+                label="TP1 hit"
                 value={summary.tp1_hit.toString()}
                 icon={<Target className="w-5 h-5" />}
-                color="info"
+                accent="info"
               />
             </AnimatedSection>
 
             <AnimatedSection className="stagger-5">
               <MetricCard
-                label="SL Hit"
+                label="SL hit"
                 value={summary.sl_hit.toString()}
                 icon={<TrendingDown className="w-5 h-5" />}
-                color="danger"
+                accent="danger"
               />
             </AnimatedSection>
 
@@ -317,7 +310,7 @@ export default function AnalysisPage() {
                 label="TP1→TP2"
                 value={`${summary.tp1_to_tp2_conversion.toFixed(1)}%`}
                 icon={<ArrowRight className="w-5 h-5" />}
-                color="warning"
+                accent="warning"
               />
             </AnimatedSection>
           </div>
@@ -325,117 +318,77 @@ export default function AnalysisPage() {
           {/* Time Metrics */}
           {(summary.avg_time_to_tp1_minutes || summary.avg_time_to_tp2_minutes) && (
             <AnimatedSection>
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-info/20 flex items-center justify-center">
-                      <Clock className="w-5 h-5 text-info" />
-                    </div>
-                    <span>Average Time to Target</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="p-6">
-                  <div className="grid grid-cols-2 gap-6">
+              <SectionPanel>
+                <PanelHeader eyebrow="Timing" title="Average time to target" />
+                <PanelBody>
+                  <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 rounded-xl bg-bg-tertiary/50 border border-border-subtle">
-                      <p className="text-xs uppercase tracking-wide text-text-muted mb-1">Time to TP1</p>
-                      <p className="text-2xl font-bold text-info tabular-nums">
+                      <p className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
+                        Time to TP1
+                      </p>
+                      <p className="text-2xl font-semibold text-info tabular-nums">
                         {formatMinutes(summary.avg_time_to_tp1_minutes)}
                       </p>
                     </div>
                     <div className="p-4 rounded-xl bg-bg-tertiary/50 border border-border-subtle">
-                      <p className="text-xs uppercase tracking-wide text-text-muted mb-1">Time to TP2</p>
-                      <p className="text-2xl font-bold text-success tabular-nums">
+                      <p className="text-[10px] uppercase tracking-wider text-text-muted mb-1">
+                        Time to TP2
+                      </p>
+                      <p className="text-2xl font-semibold text-success tabular-nums">
                         {formatMinutes(summary.avg_time_to_tp2_minutes)}
                       </p>
                     </div>
                   </div>
-                </CardContent>
-              </Card>
+                </PanelBody>
+              </SectionPanel>
             </AnimatedSection>
           )}
         </>
       ) : (
         <AnimatedSection>
-          <div className="p-12 text-center rounded-xl bg-bg-tertiary/30 border border-border-subtle">
-            <BarChart3 className="w-16 h-16 mx-auto mb-4 text-text-muted opacity-30" />
-            <h3 className="text-lg font-medium text-text-secondary mb-2">No Analysis Data</h3>
-            <p className="text-sm text-text-muted mb-6">
-              Run &quot;Fetch + Report&quot; to analyze signal outcomes from your Telegram channel.
-            </p>
-            <Button variant="accent" onClick={handleFetchAndReport} disabled={isRunning}>
-              {isRunning ? (
-                <Loader2 className="w-4 h-4 animate-spin mr-2" />
-              ) : (
-                <Zap className="w-4 h-4 mr-2" />
-              )}
-              Generate Analysis
-            </Button>
-          </div>
+          <EmptyState
+            icon={<BarChart3 className="w-5 h-5" />}
+            title="No analysis data"
+            description='Run "Fetch + Report" to analyze signal outcomes from your Telegram channel.'
+            action={
+              <Button variant="accent" onClick={handleFetchAndReport} disabled={isRunning}>
+                {isRunning ? (
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                ) : (
+                  <Zap className="w-4 h-4 mr-2" />
+                )}
+                Generate analysis
+              </Button>
+            }
+          />
         </AnimatedSection>
       )}
 
-      {/* Insights */}
       <AnimatedSection>
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-warning/20 flex items-center justify-center">
-                <Lightbulb className="w-5 h-5 text-warning" />
-              </div>
-              <span>Insights</span>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <div className="space-y-3">
-              <InsightItem text="TP1→TP2 conversion rate shows how well runners perform after scalp exits" />
-              <InsightItem text="If TP1-only dominates, consider earlier partial exits or tighter TP2" />
-              <InsightItem text="Average time-to-TP helps optimize session timing and trade management" />
-              <InsightItem text="High SL rate may indicate need for better entry timing or wider stops" />
-            </div>
-          </CardContent>
-        </Card>
+        <PerformancePanel
+          title="Insights"
+          bars={[
+            {
+              label: "TP1→TP2 conversion",
+              value: summary?.tp1_to_tp2_conversion ?? 0,
+              display: `${(summary?.tp1_to_tp2_conversion ?? 0).toFixed(1)}%`,
+              tone: "accent",
+            },
+            {
+              label: "Win rate",
+              value: summary?.win_rate ?? 0,
+              display: `${(summary?.win_rate ?? 0).toFixed(1)}%`,
+              tone: (summary?.win_rate ?? 0) >= 50 ? "success" : "danger",
+            },
+            {
+              label: "SL hits",
+              value: summary?.sl_hit ?? 0,
+              display: String(summary?.sl_hit ?? 0),
+              tone: (summary?.sl_hit ?? 0) > 0 ? "danger" : "neutral",
+            },
+          ]}
+        />
       </AnimatedSection>
     </PageContainer>
-  );
-}
-
-function MetricCard({
-  label,
-  value,
-  icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  icon: React.ReactNode;
-  color: "accent" | "success" | "danger" | "warning" | "info";
-}) {
-  const colorStyles = {
-    accent: { bg: "bg-accent/10", border: "border-accent/30", text: "text-accent" },
-    success: { bg: "bg-success/10", border: "border-success/30", text: "text-success" },
-    danger: { bg: "bg-danger/10", border: "border-danger/30", text: "text-danger" },
-    warning: { bg: "bg-warning/10", border: "border-warning/30", text: "text-warning" },
-    info: { bg: "bg-info/10", border: "border-info/30", text: "text-info" },
-  };
-
-  const styles = colorStyles[color];
-
-  return (
-    <div className={`p-4 rounded-xl ${styles.bg} border ${styles.border}`}>
-      <div className={`flex items-center gap-2 ${styles.text} mb-2`}>
-        {icon}
-      </div>
-      <p className={`text-2xl font-bold tabular-nums ${styles.text}`}>{value}</p>
-      <p className="text-xs text-text-muted mt-1">{label}</p>
-    </div>
-  );
-}
-
-function InsightItem({ text }: { text: string }) {
-  return (
-    <div className="flex items-start gap-3 p-3 rounded-lg bg-bg-tertiary/30 border border-border-subtle">
-      <div className="w-2 h-2 rounded-full bg-info mt-1.5 flex-shrink-0" />
-      <p className="text-sm text-text-secondary">{text}</p>
-    </div>
   );
 }

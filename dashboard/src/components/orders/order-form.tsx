@@ -1,14 +1,24 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import {
+  SectionPanel,
+  PanelHeader,
+  PanelBody,
+} from "@/components/layout";
 import { ORDER_TYPES, PENDING_ORDER_TYPES } from "@/lib/constants";
 import { placeOrder, getSymbols, type SymbolListItem } from "@/lib/api";
 import type { OrderType, PlaceOrderRequest } from "@/types";
-import { AlertCircle, CheckCircle, TrendingUp, TrendingDown, Loader2 } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle,
+  TrendingUp,
+  TrendingDown,
+  Loader2,
+} from "lucide-react";
 
 interface OrderFormProps {
   onSuccess?: () => void;
@@ -32,20 +42,18 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
   const isPendingOrder = PENDING_ORDER_TYPES.includes(formData.order_type);
   const isBuyOrder = formData.order_type.includes("buy");
 
-  // Fetch symbols on mount
   useEffect(() => {
     const fetchSymbols = async () => {
       try {
         const fetchedSymbols = await getSymbols();
         setSymbols(fetchedSymbols);
-        // Set first symbol as default
         if (fetchedSymbols.length > 0) {
           setFormData((prev) =>
             prev.symbol ? prev : { ...prev, symbol: fetchedSymbols[0].value }
           );
         }
-      } catch (error) {
-        console.error("Failed to fetch symbols:", error);
+      } catch (err) {
+        console.error("Failed to fetch symbols:", err);
       } finally {
         setIsLoadingSymbols(false);
       }
@@ -72,14 +80,8 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
       const result = await placeOrder(order);
 
       if (result.success) {
-        setSuccess(`Order placed successfully! Ticket: ${result.ticket}`);
-        // Reset form
-        setFormData({
-          ...formData,
-          price: "",
-          sl: "",
-          tp: "",
-        });
+        setSuccess(`Order placed successfully. Ticket: ${result.ticket}`);
+        setFormData({ ...formData, price: "", sl: "", tp: "" });
         onSuccess?.();
       } else {
         setError(result.error || "Failed to place order");
@@ -92,35 +94,33 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
   };
 
   return (
-    <Card>
-      <CardHeader className="bg-bg-tertiary/30">
-        <CardTitle>Place New Order</CardTitle>
-      </CardHeader>
-      <CardContent className="p-6">
+    <SectionPanel>
+      <PanelHeader
+        eyebrow="Execution"
+        title="Place order"
+        description="Market or pending order with optional SL/TP"
+      />
+      <PanelBody>
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Error/Success Messages */}
           {error && (
             <div className="p-4 rounded-xl bg-danger/10 border border-danger/20 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-danger/20 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-4 h-4 text-danger" />
-              </div>
+              <AlertCircle className="w-4 h-4 text-danger shrink-0" />
               <p className="text-sm text-danger">{error}</p>
             </div>
           )}
           {success && (
             <div className="p-4 rounded-xl bg-success/10 border border-success/20 flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-success/20 flex items-center justify-center shrink-0">
-                <CheckCircle className="w-4 h-4 text-success" />
-              </div>
+              <CheckCircle className="w-4 h-4 text-success shrink-0" />
               <p className="text-sm text-success">{success}</p>
             </div>
           )}
 
-          {/* Symbol */}
           {isLoadingSymbols ? (
             <div className="space-y-2">
-              <label className="text-sm text-text-secondary">Symbol</label>
-              <div className="h-11 rounded-xl bg-bg-tertiary flex items-center justify-center">
+              <label className="text-xs font-medium text-text-secondary uppercase tracking-wide">
+                Symbol
+              </label>
+              <div className="h-11 rounded-xl bg-bg-tertiary border border-border-subtle flex items-center justify-center">
                 <Loader2 className="w-4 h-4 text-text-muted animate-spin" />
               </div>
             </div>
@@ -135,9 +135,8 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
             />
           )}
 
-          {/* Order Type */}
           <Select
-            label="Order Type"
+            label="Order type"
             options={ORDER_TYPES}
             value={formData.order_type}
             onChange={(e) =>
@@ -148,9 +147,8 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
             }
           />
 
-          {/* Volume */}
           <Input
-            label="Volume (Lots)"
+            label="Volume (lots)"
             type="number"
             step="0.01"
             min="0.01"
@@ -161,7 +159,6 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
             required
           />
 
-          {/* Price (for pending orders) */}
           {isPendingOrder && (
             <Input
               label="Price"
@@ -177,19 +174,16 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
           )}
 
           <div className="grid grid-cols-2 gap-4">
-            {/* Stop Loss */}
             <Input
-              label="Stop Loss"
+              label="Stop loss"
               type="number"
               step="0.00001"
               value={formData.sl}
               onChange={(e) => setFormData({ ...formData, sl: e.target.value })}
               placeholder="Optional"
             />
-
-            {/* Take Profit */}
             <Input
-              label="Take Profit"
+              label="Take profit"
               type="number"
               step="0.00001"
               value={formData.tp}
@@ -198,36 +192,33 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
             />
           </div>
 
-          {/* Submit Button */}
           <Button
             type="submit"
             className={`w-full h-12 text-sm font-semibold ${
               isBuyOrder
-                ? "bg-success hover:bg-success/90 text-white"
-                : "bg-danger hover:bg-danger/90 text-white"
+                ? "bg-success hover:opacity-90 text-white border-0"
+                : "bg-danger hover:opacity-90 text-white border-0"
             }`}
             disabled={isLoading}
           >
             {isLoading ? (
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                <span>Placing Order...</span>
-              </div>
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Placing order…
+              </span>
             ) : (
-              <div className="flex items-center gap-2">
+              <span className="flex items-center gap-2">
                 {isBuyOrder ? (
                   <TrendingUp className="w-4 h-4" />
                 ) : (
                   <TrendingDown className="w-4 h-4" />
                 )}
-                <span>
-                  Place {formData.order_type.replace("_", " ").toUpperCase()} Order
-                </span>
-              </div>
+                Place {formData.order_type.replace("_", " ").toUpperCase()}
+              </span>
             )}
           </Button>
         </form>
-      </CardContent>
-    </Card>
+      </PanelBody>
+    </SectionPanel>
   );
 }

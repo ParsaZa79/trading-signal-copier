@@ -2,11 +2,12 @@
 
 import { useDashboard } from "@/components/layout/dashboard-layout";
 import { OrderForm } from "@/components/orders/order-form";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { PageHeader, SectionPanel, PanelHeader, PanelBody, EmptyState } from "@/components/layout";
 import { formatNumber } from "@/lib/utils";
 import { getSymbolPrice, getSymbols, type SymbolListItem } from "@/lib/api";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
+import { SymbolCell } from "@/components/dashboard/symbol-icon";
 import { PageContainer, AnimatedSection } from "@/components/motion";
 
 interface PriceData {
@@ -24,7 +25,6 @@ export default function OrdersPage() {
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
   const symbolsRef = useRef<SymbolListItem[]>([]);
 
-  // Fetch symbols from API on mount
   useEffect(() => {
     const fetchSymbols = async () => {
       try {
@@ -45,24 +45,21 @@ export default function OrdersPage() {
     if (currentSymbols.length === 0) return;
 
     try {
-      const pricePromises = currentSymbols.map(async (s) => {
-        try {
-          const price = await getSymbolPrice(s.value);
-          return { symbol: s.value, data: price };
-        } catch {
-          return null;
-        }
-      });
+      const results = await Promise.all(
+        currentSymbols.map(async (s) => {
+          try {
+            const price = await getSymbolPrice(s.value);
+            return { symbol: s.value, data: price };
+          } catch {
+            return null;
+          }
+        })
+      );
 
-      const results = await Promise.all(pricePromises);
       const priceMap: Record<string, PriceData> = {};
-
       results.forEach((result) => {
-        if (result?.data) {
-          priceMap[result.symbol] = result.data;
-        }
+        if (result?.data) priceMap[result.symbol] = result.data;
       });
-
       setPrices(priceMap);
     } catch (error) {
       console.error("Failed to fetch prices:", error);
@@ -79,51 +76,45 @@ export default function OrdersPage() {
   }, [symbols, fetchPrices]);
 
   return (
-    <PageContainer>
-      {/* Page Header */}
+    <PageContainer className="max-w-[1400px]">
       <AnimatedSection>
-        <h1 className="text-2xl font-semibold text-text-primary tracking-tight">
-          New Order
-        </h1>
-        <p className="text-sm text-text-muted mt-1">
-          Place a new market or pending order
-        </p>
+        <PageHeader
+          meta="Execution"
+          title="New order"
+          description="Place a market or pending order"
+        />
       </AnimatedSection>
 
-      <AnimatedSection className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Order Form */}
+      <AnimatedSection className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <OrderForm onSuccess={reconnect} />
 
-        {/* Live Prices */}
-        <Card>
-          <CardHeader className="bg-bg-tertiary/30">
-            <div className="flex items-center gap-3">
-              <CardTitle>Live Prices</CardTitle>
-              <div className="flex items-center gap-1 px-2 py-1 rounded-lg bg-bg-tertiary">
+        <SectionPanel>
+          <PanelHeader
+            eyebrow="Markets"
+            title="Live prices"
+            action={
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-bg-tertiary border border-border-subtle text-[10px] text-text-muted">
                 <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
-                <span className="text-[10px] text-text-muted">Streaming</span>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="p-0">
+                Streaming
+              </span>
+            }
+          />
+          <PanelBody flush>
             {isLoadingSymbols || isLoadingPrices ? (
-              <div className="py-16 text-center">
-                <div className="w-12 h-12 mx-auto mb-4 rounded-xl bg-bg-tertiary flex items-center justify-center animate-pulse">
-                  <Activity className="w-6 h-6 text-text-muted" />
-                </div>
-                <p className="text-text-muted">
-                  {isLoadingSymbols ? "Loading symbols..." : "Loading prices..."}
-                </p>
-              </div>
+              <EmptyState
+                compact
+                icon={<Activity className="w-5 h-5 animate-pulse" />}
+                title={
+                  isLoadingSymbols ? "Loading symbols…" : "Loading prices…"
+                }
+              />
             ) : symbols.length === 0 ? (
-              <div className="py-16 text-center">
-                <p className="text-text-muted">No symbols available</p>
-              </div>
+              <EmptyState title="No symbols available" />
             ) : (
-              <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+              <div className="overflow-x-auto max-h-[640px] overflow-y-auto">
                 <table className="w-full data-table">
-                  <thead className="sticky top-0 bg-bg-secondary">
-                    <tr className="border-b border-border-subtle">
+                  <thead className="sticky top-0 bg-bg-secondary z-10">
+                    <tr className="border-b border-border-subtle bg-bg-tertiary/30">
                       <th className="px-6 py-3 text-left">Symbol</th>
                       <th className="px-6 py-3 text-right">Bid</th>
                       <th className="px-6 py-3 text-right">Ask</th>
@@ -136,40 +127,29 @@ export default function OrdersPage() {
                       return (
                         <tr
                           key={symbol.value}
-                          className="border-b border-border-subtle last:border-0 group hover:bg-bg-tertiary/30"
+                          className="border-b border-border-subtle last:border-0 hover:bg-bg-tertiary/30"
                         >
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-bg-tertiary flex items-center justify-center">
-                                <span className="text-xs font-semibold text-accent">
-                                  {symbol.value.slice(0, 2)}
-                                </span>
-                              </div>
-                              <span className="font-medium text-text-primary text-sm">
-                                {symbol.label}
-                              </span>
-                            </div>
+                            <SymbolCell
+                              symbol={symbol.value}
+                              label={symbol.label}
+                              size="sm"
+                            />
                           </td>
                           <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <TrendingDown className="w-3 h-3 text-danger" />
-                              <span className="text-sm text-danger tabular-nums font-mono">
-                                {price ? formatNumber(price.bid, 5) : "-"}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              <TrendingUp className="w-3 h-3 text-success" />
-                              <span className="text-sm text-success tabular-nums font-mono">
-                                {price ? formatNumber(price.ask, 5) : "-"}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-right">
-                            <span className="text-sm text-text-secondary tabular-nums">
-                              {price ? formatNumber(price.spread, 1) : "-"}
+                            <span className="inline-flex items-center justify-end gap-1 text-sm text-danger tabular-nums font-mono">
+                              <TrendingDown className="w-3 h-3" />
+                              {price ? formatNumber(price.bid, 5) : "-"}
                             </span>
+                          </td>
+                          <td className="px-6 py-4 text-right">
+                            <span className="inline-flex items-center justify-end gap-1 text-sm text-success tabular-nums font-mono">
+                              <TrendingUp className="w-3 h-3" />
+                              {price ? formatNumber(price.ask, 5) : "-"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-right text-sm text-text-secondary tabular-nums">
+                            {price ? formatNumber(price.spread, 1) : "-"}
                           </td>
                         </tr>
                       );
@@ -178,8 +158,8 @@ export default function OrdersPage() {
                 </table>
               </div>
             )}
-          </CardContent>
-        </Card>
+          </PanelBody>
+        </SectionPanel>
       </AnimatedSection>
     </PageContainer>
   );
