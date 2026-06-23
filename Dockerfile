@@ -48,8 +48,12 @@ RUN bun install --frozen-lockfile
 COPY dashboard/ .
 
 # Next.js inlines NEXT_PUBLIC_* at build time.
-ENV NEXT_PUBLIC_API_URL=https://api.kiaparsaprintingmoneymachine.cloud
-ENV NEXT_PUBLIC_WS_URL=wss://api.kiaparsaprintingmoneymachine.cloud/ws
+ARG NEXT_PUBLIC_API_URL=https://api.kiaparsaprintingmoneymachine.cloud
+ARG NEXT_PUBLIC_WS_URL=wss://api.kiaparsaprintingmoneymachine.cloud/ws
+ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
+ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
 RUN bun run build
 
 ENV NODE_ENV=production
