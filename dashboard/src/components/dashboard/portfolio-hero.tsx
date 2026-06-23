@@ -29,11 +29,20 @@ export function PortfolioHero({ account, floatingPnL, accountId }: PortfolioHero
 
   const equity = account?.equity ?? 0;
   const balance = account?.balance ?? 0;
+  const hasAccountConnection = account !== null;
 
   useEffect(() => {
     let cancelled = false;
 
     const load = async () => {
+      if (!hasAccountConnection) {
+        setPeriodPnL(0);
+        setTradeCount(0);
+        setChartData(buildEquityCurve([], 0));
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
       try {
         const { from, to } = getDateRangeForTimeRange(range);
@@ -59,7 +68,7 @@ export function PortfolioHero({ account, floatingPnL, accountId }: PortfolioHero
     return () => {
       cancelled = true;
     };
-  }, [range, equity, balance, accountId]);
+  }, [hasAccountConnection, range, equity, balance, accountId]);
 
   const changePercent = useMemo(() => {
     const base = balance > 0 ? balance : equity;

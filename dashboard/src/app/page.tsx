@@ -36,9 +36,16 @@ export default function DashboardPage() {
   const { positions, account, session } = useDashboard();
   const [todayTrades, setTodayTrades] = useState<TradeHistoryEntry[]>([]);
   const [isLoadingTrades, setIsLoadingTrades] = useState(true);
+  const hasAccountConnection = account !== null;
 
   useEffect(() => {
     const fetchTodayTrades = async () => {
+      if (!hasAccountConnection) {
+        setTodayTrades([]);
+        setIsLoadingTrades(false);
+        return;
+      }
+
       setIsLoadingTrades(true);
       try {
         const { from, to } = getTodayDateRange();
@@ -54,7 +61,7 @@ export default function DashboardPage() {
     fetchTodayTrades();
     const interval = setInterval(fetchTodayTrades, 30000);
     return () => clearInterval(interval);
-  }, [session.activeAccountId]);
+  }, [hasAccountConnection, session.activeAccountId]);
 
   const floatingPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
   const winningPositions = positions.filter((pos) => pos.profit > 0).length;
