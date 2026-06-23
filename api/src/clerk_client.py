@@ -35,12 +35,40 @@ def _jwks_url() -> str:
     return CLERK_API_URL.rstrip("/") + "/v1/jwks"
 
 
-@lru_cache(maxsize=1)
-def _jwk_client() -> PyJWKClient:
+@lru_cache(maxsize=8)
+def _jwk_client(jwks_url: str, use_secret: bool = False) -> PyJWKClient:
     headers = {}
-    if secret_key := os.getenv("CLERK_SECRET_KEY"):
+    if use_secret and (secret_key := os.getenv("CLERK_SECRET_KEY")):
         headers["Authorization"] = f"Bearer {secret_key}"
-    return PyJWKClient(_jwks_url(), headers=headers)
+    return PyJWKClient(jwks_url, headers=headers)
+
+
+def _jwks_urls_for_token(token: str) -> list[tuple[str, bool]]:
+    urls: list[tuple[str, bool]] = []
+
+    try:
+        unverified_claims = jwt.decode(token, options={"verify_signature": False})
+    except Exception:
+        unverified_claims = {}
+
+    if configured := os.getenv("CLERK_JWKS_URL"):
+        urls.append((configured, False))
+    elif issuer := os.getenv("CLERK_ISSUER"):
+        urls.append((issuer.rstrip("/") + "/.well-known/jwks.json", False))
+    elif token_issuer := str(unverified_claims.get("iss") or "").strip():
+        urls.append((token_issuer.rstrip("/") + "/.well-known/jwks.json", False))
+
+    backend_jwks = CLERK_API_URL.rstrip("/") + "/v1/jwks"
+    urls.append((backend_jwks, True))
+
+    deduped: list[tuple[str, bool]] = []
+    seen = set()
+    for url, use_secret in urls:
+        key = (url.rstrip("/"), use_secret)
+        if key not in seen:
+            seen.add(key)
+            deduped.append((url, use_secret))
+    return deduped
 
 
 def verify_clerk_token(token: str) -> dict[str, Any] | None:
@@ -52,13 +80,21 @@ def verify_clerk_token(token: str) -> dict[str, Any] | None:
         if jwt_key:
             claims = jwt.decode(token, jwt_key, algorithms=["RS256"], options={"verify_aud": False})
         else:
-            signing_key = _jwk_client().get_signing_key_from_jwt(token)
-            claims = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["RS256"],
-                options={"verify_aud": False},
-            )
+            claims = None
+            for jwks_url, use_secret in _jwks_urls_for_token(token):
+                try:
+                    signing_key = _jwk_client(jwks_url, use_secret).get_signing_key_from_jwt(token)
+                    claims = jwt.decode(
+                        token,
+                        signing_key.key,
+                        algorithms=["RS256"],
+                        options={"verify_aud": False},
+                    )
+                    break
+                except Exception:
+                    continue
+            if claims is None:
+                return None
     except Exception:
         return None
 

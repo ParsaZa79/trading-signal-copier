@@ -1,9 +1,12 @@
 import json
+import time
 
+import jwt
 import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 
-from src import access_store, account_store, dependencies, runtime_data, security
+from src import access_store, account_store, clerk_client, dependencies, runtime_data, security
 
 TELEGRAM_ENV_KEYS = ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_CHANNEL")
 
@@ -44,6 +47,54 @@ def test_auth_token_round_trip(monkeypatch, tmp_path):
     assert payload["sub"] == user["id"]
     assert security.authenticate_credentials("owner@example.com", "correct horse battery")
     assert security.authenticate_credentials("owner@example.com", "wrong password") is None
+
+
+def test_clerk_verifier_prefers_token_issuer_jwks(monkeypatch):
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    public_key = private_key.public_key()
+    issuer = "https://super-badger-66.clerk.accounts.dev"
+    audience = "https://dashboard.kiaparsaprintingmoneymachine.cloud"
+    now = int(time.time())
+    token = jwt.encode(
+        {
+            "iss": issuer,
+            "sub": "user_clerk_owner",
+            "sid": "sess_123",
+            "azp": audience,
+            "iat": now,
+            "nbf": now - 5,
+            "exp": now + 300,
+        },
+        private_key,
+        algorithm="RS256",
+        headers={"kid": "kid_123"},
+    )
+    urls: list[str] = []
+
+    class FakeSigningKey:
+        key = public_key
+
+    class FakeJwkClient:
+        def __init__(self, url: str, headers: dict | None = None) -> None:
+            urls.append(url)
+
+        def get_signing_key_from_jwt(self, raw_token: str) -> FakeSigningKey:
+            assert raw_token == token
+            return FakeSigningKey()
+
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("CLERK_AUTHORIZED_PARTIES", audience)
+    monkeypatch.delenv("CLERK_JWKS_URL", raising=False)
+    monkeypatch.delenv("CLERK_ISSUER", raising=False)
+    monkeypatch.delenv("CLERK_JWT_KEY", raising=False)
+    monkeypatch.setattr(clerk_client, "PyJWKClient", FakeJwkClient)
+    clerk_client._jwk_client.cache_clear()
+
+    claims = clerk_client.verify_clerk_token(token)
+
+    assert claims is not None
+    assert claims["sub"] == "user_clerk_owner"
+    assert urls == [f"{issuer}/.well-known/jwks.json"]
 
 
 def test_account_config_encrypts_and_masks_secrets(monkeypatch, tmp_path):
