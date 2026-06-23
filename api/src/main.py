@@ -40,7 +40,21 @@ MT5Executor = executor_module.MT5Executor
 
 from .config import config
 from .dependencies import clear_mt5_executor, set_mt5_executor
-from .routers import account, analysis, bot, config as config_router, health, orders, positions, prompts, symbols, telegram
+from .routers import (
+    account,
+    analysis,
+    bot,
+    health,
+    mt5,
+    orders,
+    positions,
+    prompts,
+    symbols,
+    telegram,
+)
+from .routers import (
+    config as config_router,
+)
 from .routers.bot import set_log_manager
 from .services.history_service import init_database
 from .websocket.broadcaster import start_broadcaster
@@ -69,6 +83,9 @@ async def lifespan(app: FastAPI):
         login=config.mt5.login,
         password=config.mt5.password,
         server=config.mt5.server,
+        docker_host=config.mt5.docker_host,
+        docker_port=config.mt5.docker_port,
+        path=config.mt5.path,
     )
 
     # Connect to MT5
@@ -122,6 +139,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(health.router, prefix="/api/health", tags=["Health"])
+app.include_router(mt5.router, prefix="/api/mt5", tags=["MT5"])
 app.include_router(positions.router, prefix="/api/positions", tags=["Positions"])
 app.include_router(orders.router, prefix="/api/orders", tags=["Orders"])
 app.include_router(account.router, prefix="/api/account", tags=["Account"])

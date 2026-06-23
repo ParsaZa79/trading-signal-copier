@@ -10,6 +10,7 @@ from tania_signal_copier.executor import MT5Executor
 def _build_executor(position_volume: float) -> tuple[MT5Executor, SimpleNamespace]:
     """Create an executor with a mocked MT5 adapter."""
     mt5 = SimpleNamespace(
+        TRADE_ACTION_DEAL=1,
         TRADE_RETCODE_DONE=10009,
         ORDER_TYPE_BUY=0,
         ORDER_TYPE_SELL=1,

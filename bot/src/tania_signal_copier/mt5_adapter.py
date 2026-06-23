@@ -28,6 +28,7 @@ from __future__ import annotations
 import os
 import sys
 from abc import ABC, abstractmethod
+from contextlib import suppress
 from typing import Any
 
 # Platform detection
@@ -395,10 +396,7 @@ class WindowsMT5Adapter(MT5AdapterBase):
         try:
             import MetaTrader5 as mt5
 
-            if group is not None:
-                result = mt5.symbols_get(group=group)
-            else:
-                result = mt5.symbols_get()
+            result = mt5.symbols_get(group=group) if group is not None else mt5.symbols_get()
             return list(result) if result else []
         except Exception:
             return []
@@ -613,28 +611,32 @@ class LinuxMT5Adapter(MT5AdapterBase):
             return False
 
     def login(self, login: int, password: str, server: str) -> bool:
-        """Verify MT5 connection (login handled via VNC in Docker)."""
-        _ = login, password, server
+        """Log in to the MT5 account through the remote terminal.
+
+        The Docker/VNC container still owns the terminal process, but login is
+        performed programmatically so normal restarts do not require opening VNC.
+        """
         if not self._conn:
             return False
         try:
+            login_result = self._eval(
+                f"mt5.login({int(login)}, password={password!r}, server={server!r})"
+            )
+            if not login_result:
+                return False
             account = self._eval("mt5.account_info()")
             return account is not None
         except Exception as e:
-            print(f"MT5 connection verification failed: {e}")
+            print(f"MT5 login failed: {e}")
             return False
 
     def shutdown(self) -> None:
         """Shutdown MT5 connection."""
         if self._conn:
-            try:
+            with suppress(Exception):
                 self._eval("mt5.shutdown()")
-            except Exception:
-                pass
-            try:
+            with suppress(Exception):
                 self._conn.close()
-            except Exception:
-                pass
             self._conn = None
 
     def last_error(self) -> tuple[int, str]:
@@ -748,7 +750,7 @@ class LinuxMT5Adapter(MT5AdapterBase):
             result = self._eval(f"mt5.history_deals_get(position={position})")
         elif date_from is not None and date_to is not None:
             result = self._eval(
-                f"mt5.history_deals_get({repr(date_from.astimezone())}, {repr(date_to.astimezone())})"
+                f"mt5.history_deals_get({date_from.astimezone()!r}, {date_to.astimezone()!r})"
             )
         else:
             result = self._eval("mt5.history_deals_get()")

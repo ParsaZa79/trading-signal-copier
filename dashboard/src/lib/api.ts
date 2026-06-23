@@ -6,6 +6,7 @@ import type {
   PlaceOrderRequest,
   PendingOrder,
   TradeHistoryEntry,
+  MT5ConnectResponse,
 } from "@/types";
 
 function toBrokerSymbol(symbol: string): string {
@@ -42,6 +43,23 @@ async function fetchApi<T>(
 // Health
 export async function getHealth(): Promise<HealthStatus> {
   return fetchApi("/api/health");
+}
+
+export async function connectMT5(
+  config: Record<string, string>
+): Promise<MT5ConnectResponse> {
+  const dockerPort = config.MT5_DOCKER_PORT?.trim();
+  return fetchApi("/api/mt5/connect", {
+    method: "POST",
+    body: JSON.stringify({
+      login: Number(config.MT5_LOGIN),
+      password: config.MT5_PASSWORD,
+      server: config.MT5_SERVER,
+      docker_host: config.MT5_DOCKER_HOST || undefined,
+      docker_port: dockerPort ? Number(dockerPort) : undefined,
+      path: config.MT5_PATH || undefined,
+    }),
+  });
 }
 
 // Positions

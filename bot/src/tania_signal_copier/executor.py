@@ -12,6 +12,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from functools import wraps
+from threading import RLock
 from typing import Any, TypeVar
 
 from tania_signal_copier.models import OrderType, TradeConfig, TradeSignal
@@ -42,7 +43,7 @@ def with_reconnect[T](method: Callable[..., T]) -> Callable[..., T]:
 
         # Return appropriate failure based on method
         method_name = method.__name__
-        if method_name in ("execute_signal", "modify_position", "close_position"):
+        if method_name in ("execute_signal", "modify_position", "close_position", "partial_close"):
             return {"success": False, "error": "Connection lost and reconnect failed"}  # type: ignore
         elif method_name == "get_account_balance":
             return 0.0  # type: ignore
@@ -75,6 +76,9 @@ class MT5Executor:
         login: int,
         password: str,
         server: str,
+        docker_host: str | None = None,
+        docker_port: int | None = None,
+        path: str | None = None,
         max_reconnect_attempts: int = 5,
         reconnect_delay: float = 2.0,
     ) -> None:
@@ -84,18 +88,117 @@ class MT5Executor:
             login: MT5 account login number
             password: MT5 account password
             server: MT5 broker server name
+            docker_host: Docker/Wine bridge host for macOS/Linux
+            docker_port: Docker/Wine bridge port for macOS/Linux
+            path: MT5 terminal path for Windows
             max_reconnect_attempts: Max reconnection attempts (default: 5)
             reconnect_delay: Delay between reconnection attempts in seconds (default: 2.0)
         """
         self._login = login
         self._password = password
         self._server = server
+        self._docker_host = docker_host
+        self._docker_port = docker_port
+        self._path = path
         self._mt5: MT5Adapter | None = None
         self.connected = False
         self.max_reconnect_attempts = max_reconnect_attempts
         self.reconnect_delay = reconnect_delay
         self._last_ping_time: float = 0
         self._ping_interval: float = 30.0  # Check connection every 30 seconds
+        self._connection_lock = RLock()
+
+    def _connect_new_adapter(
+        self,
+        login: int,
+        password: str,
+        server: str,
+        docker_host: str | None = None,
+        docker_port: int | None = None,
+        path: str | None = None,
+    ) -> tuple[MT5Adapter | None, str | None]:
+        """Create, initialize, and authenticate a new adapter before swapping it in."""
+        try:
+            adapter = create_mt5_adapter(host=docker_host, port=docker_port, path=path)
+        except RuntimeError as e:
+            return None, f"MT5 adapter creation failed: {e}"
+
+        if not adapter.initialize():
+            error = f"MT5 initialize failed: {adapter.last_error()}"
+            with contextlib.suppress(Exception):
+                adapter.shutdown()
+            return None, error
+
+        if not adapter.login(login, password=password, server=server):
+            error = f"MT5 login failed: {adapter.last_error()}"
+            with contextlib.suppress(Exception):
+                adapter.shutdown()
+            return None, error
+
+        return adapter, None
+
+    def _activate_adapter(
+        self,
+        adapter: MT5Adapter,
+        login: int,
+        password: str,
+        server: str,
+        docker_host: str | None,
+        docker_port: int | None,
+        path: str | None,
+    ) -> None:
+        """Swap in an already-authenticated adapter."""
+        old_adapter = self._mt5
+        self._login = login
+        self._password = password
+        self._server = server
+        self._docker_host = docker_host
+        self._docker_port = docker_port
+        self._path = path
+        self._mt5 = adapter
+        self.connected = True
+        self._last_ping_time = time.time()
+
+        if old_adapter is not None and old_adapter is not adapter:
+            with contextlib.suppress(Exception):
+                old_adapter.shutdown()
+
+    def reconfigure(
+        self,
+        login: int,
+        password: str,
+        server: str,
+        docker_host: str | None = None,
+        docker_port: int | None = None,
+        path: str | None = None,
+    ) -> dict:
+        """Connect with new credentials and atomically replace the active connection.
+
+        The current connection is left untouched if the new login fails.
+        """
+        with self._connection_lock:
+            adapter, error = self._connect_new_adapter(
+                login=login,
+                password=password,
+                server=server,
+                docker_host=docker_host,
+                docker_port=docker_port,
+                path=path,
+            )
+            if adapter is None:
+                return {
+                    "success": False,
+                    "connected": self.connected,
+                    "error": error or "MT5 connection failed",
+                    "health": self.health_check(),
+                }
+
+            self._activate_adapter(adapter, login, password, server, docker_host, docker_port, path)
+            return {
+                "success": True,
+                "connected": True,
+                "health": self.health_check(),
+            }
 
     def connect(self) -> bool:
         """Initialize and connect to MT5.
@@ -103,24 +206,30 @@ class MT5Executor:
         Returns:
             True if connection successful, False otherwise
         """
-        try:
-            self._mt5 = create_mt5_adapter()
-        except RuntimeError as e:
-            print(f"MT5 adapter creation failed: {e}")
-            return False
+        with self._connection_lock:
+            adapter, error = self._connect_new_adapter(
+                login=self._login,
+                password=self._password,
+                server=self._server,
+                docker_host=self._docker_host,
+                docker_port=self._docker_port,
+                path=self._path,
+            )
+            if adapter is None:
+                print(error or "MT5 connection failed")
+                return False
 
-        if not self._mt5.initialize():
-            print(f"MT5 initialize failed: {self._mt5.last_error()}")
-            return False
+            self._activate_adapter(
+                adapter,
+                self._login,
+                self._password,
+                self._server,
+                self._docker_host,
+                self._docker_port,
+                self._path,
+            )
 
-        if not self._mt5.login(self._login, password=self._password, server=self._server):
-            print(f"MT5 login failed: {self._mt5.last_error()}")
-            self._mt5.shutdown()
-            return False
-
-        self.connected = True
-        self._last_ping_time = time.time()
-        account_info = self._mt5.account_info()
+        account_info = self._mt5.account_info() if self._mt5 else None
         if account_info:
             print(f"Connected to MT5: {account_info.name}, Balance: {account_info.balance}")
         else:
@@ -129,9 +238,10 @@ class MT5Executor:
 
     def disconnect(self) -> None:
         """Shutdown MT5 connection."""
-        if self._mt5:
-            self._mt5.shutdown()
-        self.connected = False
+        with self._connection_lock:
+            if self._mt5:
+                self._mt5.shutdown()
+            self.connected = False
 
     def is_alive(self) -> bool:
         """Check if the connection to MT5 is alive.
@@ -173,28 +283,50 @@ class MT5Executor:
         Returns:
             True if reconnection successful, False otherwise
         """
-        print("Attempting to reconnect to MT5...")
-
-        # Clean up existing connection
-        if self._mt5:
-            with contextlib.suppress(Exception):
-                self._mt5.shutdown()
-            self._mt5 = None
-        self.connected = False
-
-        for attempt in range(1, self.max_reconnect_attempts + 1):
-            print(f"Reconnection attempt {attempt}/{self.max_reconnect_attempts}...")
-
-            if self.connect():
-                print("Reconnection successful!")
+        with self._connection_lock:
+            if self._mt5 and self.connected and self._mt5.ping():
                 return True
 
-            if attempt < self.max_reconnect_attempts:
-                print(f"Reconnection failed, waiting {self.reconnect_delay}s before retry...")
-                time.sleep(self.reconnect_delay)
+            print("Attempting to reconnect to MT5...")
 
-        print("All reconnection attempts failed!")
-        return False
+            # Clean up existing connection after confirming it is not healthy.
+            if self._mt5:
+                with contextlib.suppress(Exception):
+                    self._mt5.shutdown()
+                self._mt5 = None
+            self.connected = False
+
+            for attempt in range(1, self.max_reconnect_attempts + 1):
+                print(f"Reconnection attempt {attempt}/{self.max_reconnect_attempts}...")
+
+                adapter, error = self._connect_new_adapter(
+                    login=self._login,
+                    password=self._password,
+                    server=self._server,
+                    docker_host=self._docker_host,
+                    docker_port=self._docker_port,
+                    path=self._path,
+                )
+                if adapter is not None:
+                    self._activate_adapter(
+                        adapter,
+                        self._login,
+                        self._password,
+                        self._server,
+                        self._docker_host,
+                        self._docker_port,
+                        self._path,
+                    )
+                    print("Reconnection successful!")
+                    return True
+
+                print(error or "Reconnection failed")
+                if attempt < self.max_reconnect_attempts:
+                    print(f"Reconnection failed, waiting {self.reconnect_delay}s before retry...")
+                    time.sleep(self.reconnect_delay)
+
+            print("All reconnection attempts failed!")
+            return False
 
     def health_check(self) -> dict:
         """Perform a comprehensive health check of the MT5 connection.

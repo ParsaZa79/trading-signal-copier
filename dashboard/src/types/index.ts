@@ -101,6 +101,13 @@ export interface HealthStatus {
   };
 }
 
+export interface MT5ConnectResponse {
+  success: boolean;
+  connected: boolean;
+  health: HealthStatus["mt5"];
+  error?: string | null;
+}
+
 // Bot Configuration types
 export interface BotConfig {
   // Telegram settings

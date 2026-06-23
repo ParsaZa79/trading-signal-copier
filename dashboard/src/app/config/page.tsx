@@ -16,6 +16,7 @@ import {
 import {
   getBotConfig,
   saveBotConfig,
+  connectMT5,
   getPresets,
   getPreset,
   savePreset,
@@ -68,6 +69,8 @@ export default function ConfigPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
+  const [mt5ConnectStatus, setMt5ConnectStatus] = useState<"idle" | "connecting" | "success" | "error">("idle");
+  const [mt5ConnectMessage, setMt5ConnectMessage] = useState<string | null>(null);
   const [showPresetDialog, setShowPresetDialog] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
@@ -221,6 +224,48 @@ export default function ConfigPage() {
   const handleFieldChange = (key: string, value: string) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
     setSaveStatus("idle");
+    if (key.startsWith("MT5_")) {
+      setMt5ConnectStatus("idle");
+      setMt5ConnectMessage(null);
+    }
+  };
+
+  const handleConnectMt5 = async () => {
+    const login = config.MT5_LOGIN?.trim();
+    const password = config.MT5_PASSWORD?.trim();
+    const server = config.MT5_SERVER?.trim();
+
+    if (!login || !password || !server || Number.isNaN(Number(login)) || Number(login) <= 0) {
+      setMt5ConnectStatus("error");
+      setMt5ConnectMessage("Enter a valid MT5 login, password, and server.");
+      return;
+    }
+
+    setMt5ConnectStatus("connecting");
+    setMt5ConnectMessage(null);
+
+    try {
+      await saveBotConfig(config);
+      const result = await connectMT5(config);
+      if (!result.success || !result.connected) {
+        setMt5ConnectStatus("error");
+        setMt5ConnectMessage(result.error || result.health?.error || "MT5 connection failed.");
+        return;
+      }
+
+      setMt5ConnectStatus("success");
+      const balance = result.health?.account_balance;
+      setMt5ConnectMessage(
+        typeof balance === "number"
+          ? `Connected. Account balance: ${balance.toLocaleString(undefined, {
+              maximumFractionDigits: 2,
+            })}`
+          : "Connected to MT5."
+      );
+    } catch (error) {
+      setMt5ConnectStatus("error");
+      setMt5ConnectMessage(error instanceof Error ? error.message : "MT5 connection failed.");
+    }
   };
 
   const handleSave = async () => {
@@ -506,6 +551,47 @@ export default function ConfigPage() {
                         />
                       );
                     })}
+                    {section.title === "MetaTrader 5" && (
+                      <div className="pt-4 border-t border-border-subtle space-y-3">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-text-primary">
+                              Runtime connection
+                            </p>
+                            <p className="text-xs text-text-muted mt-1">
+                              Saves these credentials and reconnects the running API process.
+                            </p>
+                          </div>
+                          <Button
+                            variant="secondary"
+                            onClick={handleConnectMt5}
+                            disabled={mt5ConnectStatus === "connecting"}
+                          >
+                            {mt5ConnectStatus === "connecting" ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : mt5ConnectStatus === "success" ? (
+                              <Check className="w-4 h-4 text-success" />
+                            ) : mt5ConnectStatus === "error" ? (
+                              <AlertCircle className="w-4 h-4 text-danger" />
+                            ) : (
+                              <Server className="w-4 h-4" />
+                            )}
+                            <span>Save & Connect</span>
+                          </Button>
+                        </div>
+                        {mt5ConnectMessage && (
+                          <div
+                            className={`rounded-xl border px-4 py-3 text-xs ${
+                              mt5ConnectStatus === "success"
+                                ? "border-success/20 bg-success/10 text-success"
+                                : "border-danger/20 bg-danger/10 text-danger"
+                            }`}
+                          >
+                            {mt5ConnectMessage}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </PanelBody>
               </SectionPanel>
