@@ -1,4 +1,4 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, currentUser } from "@clerk/nextjs/server";
 import { NextRequest } from "next/server";
 
 const BACKEND_API_URL =
@@ -22,6 +22,10 @@ async function proxyApiRequest(request: NextRequest, context: RouteContext) {
   if (!proxySecret) {
     return Response.json({ detail: "Dashboard proxy is not configured" }, { status: 500 });
   }
+  const clerkUser = await currentUser();
+  const email =
+    clerkUser?.primaryEmailAddress?.emailAddress ||
+    clerkUser?.emailAddresses?.find((item) => Boolean(item.emailAddress))?.emailAddress;
 
   const { path } = await context.params;
   const targetUrl = new URL(`/api/${path.join("/")}`, BACKEND_API_URL);
@@ -34,6 +38,7 @@ async function proxyApiRequest(request: NextRequest, context: RouteContext) {
   }
   headers.set("x-dashboard-proxy-auth", proxySecret);
   headers.set("x-clerk-user-id", userId);
+  if (email) headers.set("x-clerk-user-email", email);
   if (sessionId) headers.set("x-clerk-session-id", sessionId);
 
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
