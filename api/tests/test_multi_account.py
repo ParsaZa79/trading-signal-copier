@@ -1,6 +1,9 @@
 import json
 
-from src import account_store, runtime_data, security
+import pytest
+from fastapi import HTTPException
+
+from src import account_store, dependencies, runtime_data, security
 
 
 def _isolate_storage(monkeypatch, tmp_path):
@@ -88,3 +91,36 @@ def test_accounts_are_isolated(monkeypatch, tmp_path):
     assert first_config["MT5_PASSWORD"] == "one"
     assert second_config["MT5_LOGIN"] == "222"
     assert second_config["MT5_PASSWORD"] == "two"
+
+
+class _RuntimeExecutor:
+    def __init__(self, connected: bool = True) -> None:
+        self.connected = connected
+        self._mt5 = object() if connected else None
+        self.disconnect_called = False
+
+    def disconnect(self) -> None:
+        self.disconnect_called = True
+        self.connected = False
+        self._mt5 = None
+
+
+def test_mt5_executor_requires_account_to_own_runtime(monkeypatch):
+    primary = _RuntimeExecutor()
+    secondary = _RuntimeExecutor()
+    monkeypatch.setattr(
+        dependencies,
+        "_mt5_executors",
+        {"primary": primary, "secondary": secondary},
+    )
+    monkeypatch.setattr(dependencies, "_active_runtime_account_id", "primary")
+
+    assert dependencies.get_mt5_executor({"id": "primary"}) is primary
+    assert dependencies.is_account_runtime_active("primary", primary) is True
+    assert dependencies.is_account_runtime_active("secondary", secondary) is False
+
+    with pytest.raises(HTTPException) as exc_info:
+        dependencies.get_mt5_executor({"id": "secondary"})
+
+    assert exc_info.value.status_code == 503
+    assert secondary.disconnect_called is True

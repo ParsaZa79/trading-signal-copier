@@ -38,9 +38,14 @@ executor_module = _load_module_directly(
 )
 MT5Executor = executor_module.MT5Executor
 
-from .config import config
 from .account_store import ensure_default_account, get_websocket_account
-from .dependencies import clear_mt5_executor, get_executor_for_account_id, set_mt5_executor_factory
+from .config import config
+from .dependencies import (
+    clear_mt5_executor,
+    get_executor_for_account_id,
+    is_account_runtime_active,
+    set_mt5_executor_factory,
+)
 from .routers import (
     account,
     accounts,
@@ -89,7 +94,7 @@ async def lifespan(app: FastAPI):
 
     # Start account-aware WebSocket broadcaster.
     _broadcaster_task = asyncio.create_task(
-        start_broadcaster(get_executor_for_account_id, manager)
+        start_broadcaster(get_executor_for_account_id, manager, is_account_runtime_active)
     )
 
     yield

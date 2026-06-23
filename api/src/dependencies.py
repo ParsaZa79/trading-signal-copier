@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Any
 
-from fastapi import Depends
+from fastapi import Depends, HTTPException
 
 from .account_store import get_active_account, load_account_config
 
@@ -52,12 +52,28 @@ def get_executor_for_account_id(account_id: str) -> Any:
     return executor
 
 
+def is_account_runtime_active(account_id: str, executor: Any | None = None) -> bool:
+    """Return whether this account currently owns the shared MT5 runtime."""
+    if _active_runtime_account_id != account_id:
+        return False
+
+    if executor is None:
+        executor = _mt5_executors.get(account_id)
+
+    return bool(
+        executor is not None
+        and getattr(executor, "connected", False)
+        and getattr(executor, "_mt5", None) is not None
+    )
+
+
 def get_mt5_executor(account: dict = Depends(get_active_account)) -> Any:
     """Get the active account's MT5 executor."""
     executor = get_executor_for_account_id(account["id"])
-    if _active_runtime_account_id and _active_runtime_account_id != account["id"]:
+    if not is_account_runtime_active(account["id"], executor):
         if getattr(executor, "connected", False):
             executor.disconnect()
+        raise HTTPException(status_code=503, detail="MT5 not connected for this account")
     return executor
 
 

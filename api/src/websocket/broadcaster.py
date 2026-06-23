@@ -11,6 +11,7 @@ from .manager import ConnectionManager
 async def start_broadcaster(
     get_executor: Callable[[str], Any],
     manager: ConnectionManager,
+    is_runtime_active: Callable[[str, Any | None], bool] | None = None,
     interval: float = 1.0,
 ) -> None:
     """Background task that broadcasts position and account updates.
@@ -31,6 +32,10 @@ async def start_broadcaster(
 
             for account_id in manager.account_ids:
                 executor = get_executor(account_id)
+                if is_runtime_active is not None and not is_runtime_active(account_id, executor):
+                    await manager.broadcast(account_id, _empty_update_message(account_id))
+                    continue
+
                 message = await _build_update_message(executor, account_id)
                 await manager.broadcast(account_id, message)
 
@@ -41,6 +46,16 @@ async def start_broadcaster(
             print(f"Broadcaster error: {e}")
 
         await asyncio.sleep(interval)
+
+
+def _empty_update_message(account_id: str) -> dict:
+    return {
+        "type": "update",
+        "account_id": account_id,
+        "timestamp": datetime.now().isoformat(),
+        "positions": [],
+        "account": None,
+    }
 
 
 async def _build_update_message(executor: Any, account_id: str) -> dict:
