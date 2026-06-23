@@ -64,12 +64,8 @@ export function useWebSocket({
           }
 
           if (data.type === "update") {
-            if (data.positions) {
-              setPositions(data.positions);
-            }
-            if (data.account) {
-              setAccount(data.account);
-            }
+            setPositions(data.positions ?? []);
+            setAccount(data.account ?? null);
           } else if (data.type === "error") {
             setError(data.error || "Unknown error");
           }
@@ -112,6 +108,16 @@ export function useWebSocket({
   useEffect(() => {
     connectRef.current = connect;
   }, [connect]);
+
+  useEffect(() => {
+    // Reset immediately on account switches so data from the previous account is not displayed.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPositions([]);
+    setAccount(null);
+    setError(null);
+    setIsConnected(false);
+    reconnectAttempts.current = 0;
+  }, [accountId]);
 
   const reconnect = useCallback(() => {
     reconnectAttempts.current = 0;

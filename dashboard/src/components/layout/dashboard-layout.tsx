@@ -158,8 +158,14 @@ function AuthenticatedDashboardLayout({
 
   const activeAccount =
     session.accounts.find((item) => item.id === session.activeAccountId) ?? session.accounts[0];
+  const mt5Connected = isConnected && account !== null;
 
   const fetchHeaderPrices = useCallback(async () => {
+    if (!account) {
+      setHeaderPrices({});
+      return;
+    }
+
     try {
       const results = await Promise.all(
         HEADER_SYMBOLS.map(async (sym) => {
@@ -187,7 +193,7 @@ function AuthenticatedDashboardLayout({
     } catch (err) {
       console.error("Failed to fetch header prices:", err);
     }
-  }, []);
+  }, [account]);
 
   useEffect(() => {
     const initialFetch = setTimeout(fetchHeaderPrices, 0);
@@ -242,10 +248,10 @@ function AuthenticatedDashboardLayout({
 
   return (
     <DashboardContext.Provider
-      value={{ positions, account, isConnected, error, reconnect, session, setSession }}
+      value={{ positions, account, isConnected: mt5Connected, error, reconnect, session, setSession }}
     >
       <div className="flex min-h-screen">
-        <Sidebar isConnected={isConnected} />
+        <Sidebar isConnected={mt5Connected} />
 
         <div className="flex-1 flex flex-col min-h-screen">
           <header className="h-14 border-b border-border-subtle bg-bg-primary/70 backdrop-blur-xl sticky top-0 z-40">
@@ -255,7 +261,7 @@ function AuthenticatedDashboardLayout({
                   {activeAccount?.name || "Portfolio"}
                 </p>
                 <p className="text-[11px] text-text-muted truncate hidden sm:block">
-                  {isConnected
+                  {mt5Connected
                     ? "Markets active · Live MT5 feed"
                     : "Waiting for MT5 connection"}
                 </p>
@@ -317,7 +323,7 @@ function AuthenticatedDashboardLayout({
 
                 <button className="relative w-9 h-9 rounded-xl bg-bg-tertiary/80 border border-border-subtle flex items-center justify-center hover:bg-bg-elevated transition-colors">
                   <Bell className="w-4 h-4 text-text-secondary" />
-                  {isConnected && (
+                  {mt5Connected && (
                     <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-success rounded-full" />
                   )}
                 </button>
