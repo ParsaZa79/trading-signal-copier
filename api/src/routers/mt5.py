@@ -1,14 +1,17 @@
 """MT5 connection management router."""
 
-from typing import Any
+from contextlib import suppress
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from ..account_store import get_active_account, load_account_config, save_account_config
+from ..broker_catalog import list_broker_servers, record_broker_server
 from ..dependencies import connect_account_executor
 
 router = APIRouter()
+ActiveAccount = Annotated[dict[str, Any], Depends(get_active_account)]
 
 
 class MT5ConnectRequest(BaseModel):
@@ -39,10 +42,31 @@ class MT5ConnectResponse(BaseModel):
     error: str | None = None
 
 
+class MT5BrokerServer(BaseModel):
+    value: str
+    label: str
+    source: str = "seed"
+
+
+class MT5BrokerServersResponse(BaseModel):
+    success: bool
+    brokers: list[MT5BrokerServer]
+
+
+@router.get("/brokers", response_model=MT5BrokerServersResponse)
+async def list_mt5_broker_servers() -> MT5BrokerServersResponse:
+    """List known MT5 broker servers.
+
+    MetaTrader does not expose broker discovery through the Python API, so this
+    combines a seed catalog with servers learned from successful logins.
+    """
+    return MT5BrokerServersResponse(success=True, brokers=list_broker_servers())
+
+
 @router.post("/connect", response_model=MT5ConnectResponse)
 async def connect_mt5(
     request: MT5ConnectRequest,
-    account: dict = Depends(get_active_account),
+    account: ActiveAccount,
 ) -> MT5ConnectResponse:
     """Connect the running API process to MT5 using dashboard-provided credentials."""
     updates = {
@@ -52,7 +76,9 @@ async def connect_mt5(
             "MT5_PASSWORD": request.password,
             "MT5_SERVER": request.server,
             "MT5_DOCKER_HOST": request.docker_host,
-            "MT5_DOCKER_PORT": str(request.docker_port) if request.docker_port is not None else None,
+            "MT5_DOCKER_PORT": (
+                str(request.docker_port) if request.docker_port is not None else None
+            ),
             "MT5_PATH": request.path,
         }.items()
         if value is not None
@@ -74,9 +100,16 @@ async def connect_mt5(
         raise HTTPException(status_code=400, detail=f"Missing MT5 {', '.join(missing)}")
 
     result = connect_account_executor(account["id"], config)
+    health = result.get("health", {})
+    if result.get("success") and result.get("connected"):
+        with suppress(Exception):
+            record_broker_server(
+                str(health.get("account_server") or config.get("MT5_SERVER") or ""),
+                str(health.get("account_company") or ""),
+            )
     return MT5ConnectResponse(
         success=bool(result.get("success")),
         connected=bool(result.get("connected")),
-        health=result.get("health", {}),
+        health=health,
         error=result.get("error"),
     )

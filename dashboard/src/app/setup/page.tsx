@@ -21,15 +21,23 @@ import { useDashboard } from "@/components/layout/dashboard-layout";
 import { AnimatedSection, PageContainer } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import {
   activateAccount,
   completeAccountSetup,
   connectMT5,
   createAccount,
+  getMT5BrokerServers,
   getBotConfig,
   getMe,
   saveBotConfig,
 } from "@/lib/api";
+import {
+  CUSTOM_BROKER_SERVER_VALUE,
+  MT5_BROKER_SERVER_OPTIONS,
+  brokerServerOptionsWithCustom,
+  type BrokerServerOption,
+} from "@/lib/broker-servers";
 
 const EMPTY_CONFIG = {
   MT5_LOGIN: "",
@@ -49,11 +57,22 @@ export default function SetupPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [brokerServers, setBrokerServers] = useState<BrokerServerOption[]>(
+    MT5_BROKER_SERVER_OPTIONS
+  );
+  const [useCustomBrokerServer, setUseCustomBrokerServer] = useState(false);
 
   const activeAccount = useMemo(
     () => session.accounts.find((account) => account.id === session.activeAccountId),
     [session.accounts, session.activeAccountId]
   );
+  const brokerServerOptions = useMemo(
+    () => brokerServerOptionsWithCustom(config.MT5_SERVER, brokerServers),
+    [brokerServers, config.MT5_SERVER]
+  );
+  const selectedBrokerServer = useCustomBrokerServer
+    ? CUSTOM_BROKER_SERVER_VALUE
+    : config.MT5_SERVER;
 
   useEffect(() => {
     if (activeAccount?.name) {
@@ -94,10 +113,35 @@ export default function SetupPage() {
     };
   }, [session.activeAccountId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getMT5BrokerServers()
+      .then((result) => {
+        if (!cancelled && result.success && result.brokers.length > 0) {
+          setBrokerServers(result.brokers);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const updateField = (key: keyof SetupConfig, value: string) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
     setError(null);
     setMessage(null);
+  };
+
+  const updateBrokerServer = (value: string) => {
+    if (value === CUSTOM_BROKER_SERVER_VALUE) {
+      setUseCustomBrokerServer(true);
+      updateField("MT5_SERVER", "");
+      return;
+    }
+
+    setUseCustomBrokerServer(false);
+    updateField("MT5_SERVER", value);
   };
 
   const validate = () => {
@@ -109,7 +153,7 @@ export default function SetupPage() {
     if (!config.MT5_PASSWORD.trim() && !configuredSecrets.includes("MT5_PASSWORD")) {
       missing.push("MT5 password");
     }
-    if (!config.MT5_SERVER.trim()) missing.push("MT5 server");
+    if (!config.MT5_SERVER.trim()) missing.push("broker server");
     return missing;
   };
 
@@ -222,13 +266,25 @@ export default function SetupPage() {
                   disabled={isSubmitting}
                 />
                 <div className="md:col-span-2">
-                  <Input
-                    label="Server"
-                    value={config.MT5_SERVER}
-                    onChange={(event) => updateField("MT5_SERVER", event.target.value)}
-                    placeholder="Broker-Real"
+                  <Select
+                    label="Broker"
+                    value={selectedBrokerServer}
+                    onChange={(event) => updateBrokerServer(event.target.value)}
+                    options={brokerServerOptions}
+                    placeholder="Select broker server"
                     disabled={isSubmitting}
                   />
+                  {useCustomBrokerServer && (
+                    <div className="mt-4">
+                      <Input
+                        label="Server name"
+                        value={config.MT5_SERVER}
+                        onChange={(event) => updateField("MT5_SERVER", event.target.value)}
+                        placeholder="Exact MT5 server"
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             </PanelBody>
@@ -275,7 +331,7 @@ export default function SetupPage() {
                   done={Boolean(config.MT5_PASSWORD.trim()) || configuredSecrets.includes("MT5_PASSWORD")}
                   label="Broker password saved"
                 />
-                <ChecklistItem done={Boolean(config.MT5_SERVER.trim())} label="Broker server entered" />
+                <ChecklistItem done={Boolean(config.MT5_SERVER.trim())} label="Broker server selected" />
               </div>
             </PanelBody>
           </SectionPanel>

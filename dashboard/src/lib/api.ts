@@ -7,6 +7,7 @@ import {
   type DashboardAccount,
 } from "./auth-storage";
 import { getApiToken } from "./clerk-token";
+import type { BrokerServerOption } from "./broker-servers";
 import type {
   Position,
   AccountInfo,
@@ -283,6 +284,13 @@ export async function connectMT5(
       path: config.MT5_PATH || undefined,
     }),
   });
+}
+
+export async function getMT5BrokerServers(): Promise<{
+  success: boolean;
+  brokers: BrokerServerOption[];
+}> {
+  return fetchApi("/api/mt5/brokers");
 }
 
 // Positions

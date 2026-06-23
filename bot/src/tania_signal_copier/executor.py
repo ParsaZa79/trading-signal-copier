@@ -340,6 +340,8 @@ class MT5Executor:
             "account_accessible": False,
             "trading_enabled": False,
             "account_balance": 0.0,
+            "account_server": None,
+            "account_company": None,
             "error": None,
         }
 
@@ -357,6 +359,8 @@ class MT5Executor:
                 status["account_accessible"] = True
                 status["account_balance"] = account.balance
                 status["trading_enabled"] = account.trade_allowed
+                status["account_server"] = getattr(account, "server", None)
+                status["account_company"] = getattr(account, "company", None)
 
         except Exception as e:
             status["error"] = str(e)

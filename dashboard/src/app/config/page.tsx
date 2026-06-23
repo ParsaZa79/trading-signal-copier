@@ -18,6 +18,7 @@ import {
   getBotConfig,
   saveBotConfig,
   connectMT5,
+  getMT5BrokerServers,
   getPresets,
   getPreset,
   savePreset,
@@ -42,6 +43,12 @@ import {
 } from "lucide-react";
 import { PageContainer, AnimatedSection } from "@/components/motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  CUSTOM_BROKER_SERVER_VALUE,
+  MT5_BROKER_SERVER_OPTIONS,
+  brokerServerOptionsWithCustom,
+  type BrokerServerOption,
+} from "@/lib/broker-servers";
 
 const IS_MACOS = typeof window !== "undefined" && navigator.platform.includes("Mac");
 
@@ -73,6 +80,10 @@ export default function ConfigPage() {
   const [showPresetDialog, setShowPresetDialog] = useState(false);
   const [newPresetName, setNewPresetName] = useState("");
   const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
+  const [brokerServers, setBrokerServers] = useState<BrokerServerOption[]>(
+    MT5_BROKER_SERVER_OPTIONS
+  );
+  const [useCustomBrokerServer, setUseCustomBrokerServer] = useState(false);
 
   // System prompts state
   const [systemPrompt, setSystemPrompt] = useState("");
@@ -93,6 +104,10 @@ export default function ConfigPage() {
     });
   }, []);
 
+  const selectedBrokerServer = useCustomBrokerServer
+    ? CUSTOM_BROKER_SERVER_VALUE
+    : config.MT5_SERVER || "";
+
   const configSections: ConfigSection[] = [
     {
       title: "MetaTrader 5",
@@ -101,7 +116,13 @@ export default function ConfigPage() {
       fields: [
         { key: "MT5_LOGIN", label: "Login", type: "text", placeholder: "Account number" },
         { key: "MT5_PASSWORD", label: "Password", type: "password", placeholder: "Your password" },
-        { key: "MT5_SERVER", label: "Server", type: "text", placeholder: "Broker-Server" },
+        {
+          key: "MT5_SERVER",
+          label: "Broker",
+          type: "select",
+          placeholder: "Select broker server",
+          options: brokerServerOptionsWithCustom(config.MT5_SERVER, brokerServers),
+        },
         ...(IS_MACOS
           ? [
               { key: "MT5_DOCKER_HOST", label: "Docker Host", type: "text" as const, placeholder: "localhost" },
@@ -167,6 +188,7 @@ export default function ConfigPage() {
 
       if (configRes.success) {
         setConfig(configRes.config);
+        setUseCustomBrokerServer(false);
         applyConfiguredSecrets(configRes.configuredSecrets || []);
       }
 
@@ -183,6 +205,14 @@ export default function ConfigPage() {
         setIsCustomSystemPrompt(promptsRes.is_custom_system_prompt);
         setIsCustomCorrectionPrompt(promptsRes.is_custom_correction_prompt);
       }
+
+      getMT5BrokerServers()
+        .then((brokerRes) => {
+          if (brokerRes.success && brokerRes.brokers.length > 0) {
+            setBrokerServers(brokerRes.brokers);
+          }
+        })
+        .catch(() => undefined);
     } catch (error) {
       console.error("Failed to load config:", error);
     } finally {
@@ -205,6 +235,17 @@ export default function ConfigPage() {
       setMt5ConnectStatus("idle");
       setMt5ConnectMessage(null);
     }
+  };
+
+  const handleBrokerServerChange = (value: string) => {
+    if (value === CUSTOM_BROKER_SERVER_VALUE) {
+      setUseCustomBrokerServer(true);
+      handleFieldChange("MT5_SERVER", "");
+      return;
+    }
+
+    setUseCustomBrokerServer(false);
+    handleFieldChange("MT5_SERVER", value);
   };
 
   const handleConnectMt5 = async () => {
@@ -235,6 +276,14 @@ export default function ConfigPage() {
       }
 
       setMt5ConnectStatus("success");
+      setUseCustomBrokerServer(false);
+      getMT5BrokerServers()
+        .then((brokerRes) => {
+          if (brokerRes.success && brokerRes.brokers.length > 0) {
+            setBrokerServers(brokerRes.brokers);
+          }
+        })
+        .catch(() => undefined);
       const balance = result.health?.account_balance;
       setMt5ConnectMessage(
         typeof balance === "number"
@@ -278,6 +327,7 @@ export default function ConfigPage() {
       const res = await getPreset(name);
       if (res.success) {
         setConfig(res.preset.values);
+        setUseCustomBrokerServer(false);
         applyConfiguredSecrets(res.preset.configuredSecrets || []);
         setCurrentPreset(name);
       }
@@ -494,13 +544,31 @@ export default function ConfigPage() {
 
                       if (field.type === "select") {
                         return (
-                          <Select
-                            key={field.key}
-                            label={field.label}
-                            value={config[field.key] || ""}
-                            onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                            options={field.options || []}
-                          />
+                          <div key={field.key} className="space-y-4">
+                            <Select
+                              label={field.label}
+                              value={
+                                field.key === "MT5_SERVER"
+                                  ? selectedBrokerServer
+                                  : config[field.key] || ""
+                              }
+                              onChange={(e) =>
+                                field.key === "MT5_SERVER"
+                                  ? handleBrokerServerChange(e.target.value)
+                                  : handleFieldChange(field.key, e.target.value)
+                              }
+                              options={field.options || []}
+                              placeholder={field.placeholder}
+                            />
+                            {field.key === "MT5_SERVER" && useCustomBrokerServer && (
+                              <Input
+                                label="Server name"
+                                value={config.MT5_SERVER || ""}
+                                onChange={(e) => handleFieldChange("MT5_SERVER", e.target.value)}
+                                placeholder="Exact MT5 server"
+                              />
+                            )}
+                          </div>
                         );
                       }
 
