@@ -597,7 +597,7 @@ class LinuxMT5Adapter(MT5AdapterBase):
         return self._conn.eval(code)
 
     def initialize(self) -> bool:
-        """Initialize connection to MT5 via RPyC classic server in Docker."""
+        """Initialize the RPyC bridge to the remote MT5 Python process."""
         try:
             import rpyc  # type: ignore[import-untyped]
 
@@ -605,7 +605,7 @@ class LinuxMT5Adapter(MT5AdapterBase):
             self._conn._config["sync_request_timeout"] = 300
             self._conn.execute("import MetaTrader5 as mt5")
             self._conn.execute("import datetime")
-            return self._eval("mt5.initialize()")
+            return True
         except Exception as e:
             print(f"MT5 initialization failed: {e}")
             return False
@@ -619,10 +619,12 @@ class LinuxMT5Adapter(MT5AdapterBase):
         if not self._conn:
             return False
         try:
-            login_result = self._eval(
-                f"mt5.login({int(login)}, password={password!r}, server={server!r})"
+            with suppress(Exception):
+                self._eval("mt5.shutdown()")
+            initialized = self._eval(
+                f"mt5.initialize(login={int(login)}, password={password!r}, server={server!r})"
             )
-            if not login_result:
+            if not initialized:
                 return False
             account = self._eval("mt5.account_info()")
             return account is not None

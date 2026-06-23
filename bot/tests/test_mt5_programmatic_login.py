@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from typing import Any
@@ -16,12 +17,19 @@ class FakeRemoteConnection:
     def __init__(self, login_ok: bool = True, account_ok: bool = True) -> None:
         self.login_ok = login_ok
         self.account_ok = account_ok
+        self._config: dict[str, object] = {}
+        self.execute_calls: list[str] = []
         self.eval_calls: list[str] = []
+
+    def execute(self, code: str) -> None:
+        self.execute_calls.append(code)
 
     def eval(self, code: str) -> Any:
         self.eval_calls.append(code)
-        if code.startswith("mt5.login("):
+        if code.startswith("mt5.initialize("):
             return self.login_ok
+        if code == "mt5.shutdown()":
+            return None
         if code == "mt5.account_info()":
             return SimpleNamespace(balance=100.0) if self.account_ok else None
         return None
@@ -65,7 +73,23 @@ class FakeAdapter:
         )
 
 
-def test_linux_adapter_login_calls_remote_mt5_login_before_account_check() -> None:
+def test_linux_adapter_initialize_only_connects_bridge(monkeypatch) -> None:
+    fake_conn = FakeRemoteConnection()
+    fake_rpyc = SimpleNamespace(
+        classic=SimpleNamespace(connect=lambda host, port: fake_conn),
+    )
+    monkeypatch.setitem(sys.modules, "rpyc", fake_rpyc)
+
+    adapter = LinuxMT5Adapter(host="mt5", port=8001)
+
+    result = adapter.initialize()
+
+    assert result is True
+    assert fake_conn.execute_calls == ["import MetaTrader5 as mt5", "import datetime"]
+    assert fake_conn.eval_calls == []
+
+
+def test_linux_adapter_login_initializes_remote_mt5_with_credentials_before_account_check() -> None:
     adapter = LinuxMT5Adapter(host="mt5", port=8001)
     fake_conn = FakeRemoteConnection()
     adapter._conn = fake_conn
@@ -73,10 +97,11 @@ def test_linux_adapter_login_calls_remote_mt5_login_before_account_check() -> No
     result = adapter.login(login=123456, password="secret", server="Broker-Server")
 
     assert result is True
-    assert fake_conn.eval_calls[0] == (
-        "mt5.login(123456, password='secret', server='Broker-Server')"
-    )
-    assert fake_conn.eval_calls[1] == "mt5.account_info()"
+    assert fake_conn.eval_calls == [
+        "mt5.shutdown()",
+        "mt5.initialize(login=123456, password='secret', server='Broker-Server')",
+        "mt5.account_info()",
+    ]
 
 
 def test_linux_adapter_login_failure_does_not_accept_existing_account_state() -> None:
@@ -87,8 +112,27 @@ def test_linux_adapter_login_failure_does_not_accept_existing_account_state() ->
     result = adapter.login(login=123456, password="bad", server="Broker-Server")
 
     assert result is False
-    assert len(fake_conn.eval_calls) == 1
-    assert fake_conn.eval_calls[0].startswith("mt5.login(")
+    assert fake_conn.eval_calls == (
+        [
+            "mt5.shutdown()",
+            "mt5.initialize(login=123456, password='bad', server='Broker-Server')",
+        ]
+    )
+
+
+def test_linux_adapter_account_check_failure_rejects_initialized_terminal() -> None:
+    adapter = LinuxMT5Adapter(host="mt5", port=8001)
+    fake_conn = FakeRemoteConnection(login_ok=True, account_ok=False)
+    adapter._conn = fake_conn
+
+    result = adapter.login(login=123456, password="secret", server="Broker-Server")
+
+    assert result is False
+    assert fake_conn.eval_calls == [
+        "mt5.shutdown()",
+        "mt5.initialize(login=123456, password='secret', server='Broker-Server')",
+        "mt5.account_info()",
+    ]
 
 
 def test_executor_reconfigure_keeps_existing_connection_when_new_login_fails(monkeypatch) -> None:
