@@ -5,6 +5,8 @@ from fastapi import HTTPException
 
 from src import access_store, account_store, dependencies, runtime_data, security
 
+TELEGRAM_ENV_KEYS = ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_CHANNEL")
+
 
 def _isolate_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(security, "USERS_PATH", tmp_path / "users.json")
@@ -15,6 +17,17 @@ def _isolate_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(access_store, "ACCOUNTS_PATH", tmp_path / "accounts.json")
     monkeypatch.setattr(runtime_data, "DATA_DIR", tmp_path)
     monkeypatch.setattr(runtime_data, "ACCOUNTS_DIR", tmp_path / "accounts")
+    monkeypatch.setattr(runtime_data, "CACHE_PATH", tmp_path / "bot_config_cache.json")
+    monkeypatch.setattr(runtime_data, "ENV_PATH", tmp_path / ".env")
+    for key in TELEGRAM_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+
+def _configure_shared_telegram(monkeypatch, tmp_path):
+    monkeypatch.setenv("TELEGRAM_API_ID", "123456")
+    monkeypatch.setenv("TELEGRAM_API_HASH", "shared-telegram-hash")
+    monkeypatch.setenv("TELEGRAM_CHANNEL", "shared-signals")
+    (tmp_path / "signal_bot_session.session").write_text("session", encoding="utf-8")
 
 
 def test_auth_token_round_trip(monkeypatch, tmp_path):
@@ -128,8 +141,9 @@ def test_accounts_are_not_created_until_requested(monkeypatch, tmp_path):
     assert exc_info.value.status_code == 404
 
 
-def test_account_setup_requires_broker_telegram_and_completion_marker(monkeypatch, tmp_path):
+def test_account_setup_requires_broker_shared_telegram_and_completion_marker(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
+    _configure_shared_telegram(monkeypatch, tmp_path)
 
     user = security.create_user("owner@example.com", "correct horse battery")
     account = account_store.create_account(user["id"], "Live Account")
@@ -140,9 +154,6 @@ def test_account_setup_requires_broker_telegram_and_completion_marker(monkeypatc
             "MT5_LOGIN": "123456",
             "MT5_PASSWORD": "broker-password",
             "MT5_SERVER": "Broker-Real",
-            "TELEGRAM_API_ID": "123456",
-            "TELEGRAM_API_HASH": "telegram-hash",
-            "TELEGRAM_CHANNEL": "signals",
         },
     )
 
@@ -156,6 +167,32 @@ def test_account_setup_requires_broker_telegram_and_completion_marker(monkeypatc
     assert completed["setup_complete"] is True
     assert refreshed["setup_complete"] is True
     assert account_store.list_user_accounts(user["id"])[0]["setup_complete"] is True
+
+
+def test_account_config_strips_telegram_overrides(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+
+    user = security.create_user("owner@example.com", "correct horse battery")
+    account = account_store.create_account(user["id"], "Live Account")
+
+    account_store.save_account_config(
+        account["id"],
+        {
+            "MT5_LOGIN": "123456",
+            "TELEGRAM_API_ID": "999",
+            "TELEGRAM_API_HASH": "user-hash",
+            "TELEGRAM_CHANNEL": "user-channel",
+            "TELEGRAM_SESSION_NAME": "user-session",
+        },
+    )
+
+    config = account_store.load_account_config(account["id"], reveal_secrets=True)
+
+    assert config["MT5_LOGIN"] == "123456"
+    assert "TELEGRAM_API_ID" not in config
+    assert "TELEGRAM_API_HASH" not in config
+    assert "TELEGRAM_CHANNEL" not in config
+    assert "TELEGRAM_SESSION_NAME" not in config
 
 
 def test_invited_clerk_user_links_pending_access(monkeypatch, tmp_path):

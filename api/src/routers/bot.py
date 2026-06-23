@@ -7,7 +7,7 @@ import signal
 import subprocess
 import sys
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -18,10 +18,11 @@ from ..runtime_data import (
     account_pid_file,
     account_prompts_path,
     account_state_path,
-    account_telegram_session_name,
 )
+from ..shared_telegram import shared_telegram_environment
 
 router = APIRouter()
+CurrentAccount = Annotated[dict[str, Any], Depends(get_active_account)]
 
 # Per-account process state
 BotStatus = Literal["stopped", "starting", "running", "stopping", "error"]
@@ -135,7 +136,7 @@ class StopBotRequest(BaseModel):
 
 
 @router.get("/status")
-async def get_bot_status(account: dict = Depends(get_active_account)):
+async def get_bot_status(account: CurrentAccount):
     """Get current bot status."""
     account_id = account["id"]
 
@@ -157,7 +158,7 @@ async def get_bot_status(account: dict = Depends(get_active_account)):
 
 
 @router.post("/start")
-async def start_bot(request: StartBotRequest, account: dict = Depends(get_active_account)):
+async def start_bot(request: StartBotRequest, account: CurrentAccount):
     """Start the bot process."""
     account_id = account["id"]
     pid_file = account_pid_file(account_id)
@@ -177,9 +178,13 @@ async def start_bot(request: StartBotRequest, account: dict = Depends(get_active
 
         # Load environment
         env_vars = await _load_env_for_bot(account_id)
-        process_env = {**os.environ, **env_vars, "PYTHONUNBUFFERED": "1"}
+        process_env = {
+            **os.environ,
+            **env_vars,
+            **shared_telegram_environment(),
+            "PYTHONUNBUFFERED": "1",
+        }
         process_env["BOT_STATE_FILE"] = str(state_path)
-        process_env["TELEGRAM_SESSION_NAME"] = str(account_telegram_session_name(account_id))
         process_env["SYSTEM_PROMPTS_FILE"] = str(account_prompts_path(account_id))
 
         # Build command
@@ -250,7 +255,7 @@ async def start_bot(request: StartBotRequest, account: dict = Depends(get_active
 
 
 @router.post("/stop")
-async def stop_bot(account: dict = Depends(get_active_account)):
+async def stop_bot(account: CurrentAccount):
     """Stop the bot process."""
     account_id = account["id"]
     pid_file = account_pid_file(account_id)
@@ -312,7 +317,7 @@ async def stop_bot(account: dict = Depends(get_active_account)):
 
 
 @router.get("/positions")
-async def get_tracked_positions(account: dict = Depends(get_active_account)):
+async def get_tracked_positions(account: CurrentAccount):
     """Get bot's tracked positions from state file."""
     import json
 
@@ -382,7 +387,7 @@ async def get_tracked_positions(account: dict = Depends(get_active_account)):
 
 
 @router.delete("/positions")
-async def clear_tracked_positions(account: dict = Depends(get_active_account)):
+async def clear_tracked_positions(account: CurrentAccount):
     """Clear bot's tracked positions state file."""
     try:
         state_path = account_state_path(account["id"])

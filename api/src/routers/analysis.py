@@ -7,15 +7,18 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..account_store import get_active_account
-from ..runtime_data import account_analysis_dir, account_analysis_outcomes_path, account_telegram_session_name
+from ..runtime_data import account_analysis_dir, account_analysis_outcomes_path
+from ..shared_telegram import shared_telegram_environment
 from .bot import _load_env_for_bot
 
 router = APIRouter()
+CurrentAccount = Annotated[dict[str, Any], Depends(get_active_account)]
 
 # Paths
 BOT_DIR = Path(__file__).parent.parent.parent.parent / "bot"
@@ -32,7 +35,7 @@ class RunAnalysisRequest(BaseModel):
 
 
 @router.get("/summary")
-async def get_analysis_summary(account: dict = Depends(get_active_account)):
+async def get_analysis_summary(account: CurrentAccount):
     """Get analysis summary from signals_outcomes.json."""
     outcomes_path = account_analysis_outcomes_path(account["id"])
     if not outcomes_path.exists():
@@ -154,7 +157,7 @@ async def get_analysis_summary(account: dict = Depends(get_active_account)):
 
 
 @router.post("/run")
-async def run_analysis(request: RunAnalysisRequest, account: dict = Depends(get_active_account)):
+async def run_analysis(request: RunAnalysisRequest, account: CurrentAccount):
     """Run analysis scripts (fetch signals or generate report).
 
     Uses asyncio.create_subprocess_exec for safe command execution
@@ -196,9 +199,9 @@ async def run_analysis(request: RunAnalysisRequest, account: dict = Depends(get_
         # then overlay the dashboard-stored bot config variables.
         script_env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
         script_env.update(bot_env)
+        script_env.update(shared_telegram_environment())
         script_env["PYTHONUNBUFFERED"] = "1"
         script_env["SIGNAL_ANALYSIS_DIR"] = str(account_analysis_dir(account["id"]))
-        script_env["TELEGRAM_SESSION_NAME"] = str(account_telegram_session_name(account["id"]))
 
         # Run the script using subprocess_exec (safe, no shell)
         proc = await asyncio.create_subprocess_exec(

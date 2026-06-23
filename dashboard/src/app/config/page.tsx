@@ -22,14 +22,11 @@ import {
   getPreset,
   savePreset,
   deletePreset,
-  getTelegramChannels,
   getSystemPrompts,
   saveSystemPrompts,
   resetSystemPrompts,
-  type TelegramChannel,
 } from "@/lib/api";
 import {
-  Send,
   Server,
   TrendingUp,
   Settings2,
@@ -45,7 +42,6 @@ import {
 } from "lucide-react";
 import { PageContainer, AnimatedSection } from "@/components/motion";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ChannelSelector } from "@/components/ui/channel-selector";
 
 const IS_MACOS = typeof window !== "undefined" && navigator.platform.includes("Mac");
 
@@ -56,7 +52,7 @@ interface ConfigSection {
   fields: Array<{
     key: string;
     label: string;
-    type: "text" | "password" | "select" | "channel";
+    type: "text" | "password" | "select";
     placeholder?: string;
     options?: Array<{ value: string; label: string }>;
     condition?: () => boolean;
@@ -78,11 +74,6 @@ export default function ConfigPage() {
   const [newPresetName, setNewPresetName] = useState("");
   const [presetDropdownOpen, setPresetDropdownOpen] = useState(false);
 
-  // Telegram channels state
-  const [channels, setChannels] = useState<TelegramChannel[]>([]);
-  const [isLoadingChannels, setIsLoadingChannels] = useState(false);
-  const [channelsError, setChannelsError] = useState<string | null>(null);
-
   // System prompts state
   const [systemPrompt, setSystemPrompt] = useState("");
   const [correctionPrompt, setCorrectionPrompt] = useState("");
@@ -103,16 +94,6 @@ export default function ConfigPage() {
   }, []);
 
   const configSections: ConfigSection[] = [
-    {
-      title: "Telegram",
-      icon: <Send className="w-5 h-5" />,
-      color: "info",
-      fields: [
-        { key: "TELEGRAM_API_ID", label: "API ID", type: "text", placeholder: "123456789" },
-        { key: "TELEGRAM_API_HASH", label: "API Hash", type: "password", placeholder: "Your API hash" },
-        { key: "TELEGRAM_CHANNEL", label: "Channel", type: "channel", placeholder: "Channel name or ID" },
-      ],
-    },
     {
       title: "MetaTrader 5",
       icon: <Server className="w-5 h-5" />,
@@ -216,29 +197,6 @@ export default function ConfigPage() {
     setMt5ConnectMessage(null);
     loadData();
   }, [loadData, session.activeAccountId]);
-
-  const handleRefreshChannels = useCallback(async () => {
-    const apiId = config.TELEGRAM_API_ID;
-    const apiHash = config.TELEGRAM_API_HASH;
-
-    if (!apiId || !apiHash) {
-      setChannelsError("Please enter API ID and API Hash first");
-      return;
-    }
-
-    setIsLoadingChannels(true);
-    setChannelsError(null);
-
-    try {
-      const res = await getTelegramChannels(apiId, apiHash);
-      setChannels(res.channels);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to fetch channels";
-      setChannelsError(message);
-    } finally {
-      setIsLoadingChannels(false);
-    }
-  }, [config.TELEGRAM_API_ID, config.TELEGRAM_API_HASH]);
 
   const handleFieldChange = (key: string, value: string) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
@@ -542,33 +500,6 @@ export default function ConfigPage() {
                             value={config[field.key] || ""}
                             onChange={(e) => handleFieldChange(field.key, e.target.value)}
                             options={field.options || []}
-                          />
-                        );
-                      }
-
-                      if (field.type === "channel") {
-                        // Parse comma-separated IDs to array
-                        const selectedIds = (config[field.key] || "")
-                          .split(",")
-                          .map((id) => id.trim())
-                          .filter(Boolean);
-
-                        return (
-                          <ChannelSelector
-                            key={field.key}
-                            channels={channels}
-                            selectedChannelIds={selectedIds}
-                            onSelectionChange={(channelIds) =>
-                              handleFieldChange(field.key, channelIds.join(","))
-                            }
-                            onRefresh={handleRefreshChannels}
-                            isLoading={isLoadingChannels}
-                            error={channelsError}
-                            disabled={
-                              !config.TELEGRAM_API_ID ||
-                              (!config.TELEGRAM_API_HASH &&
-                                !isSecretConfigured("TELEGRAM_API_HASH"))
-                            }
                           />
                         );
                       }

@@ -2,6 +2,7 @@
 
 import json
 from datetime import datetime
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -15,8 +16,10 @@ from ..account_store import (
     save_account_config,
 )
 from ..runtime_data import ENV_PATH, account_last_preset_path, account_presets_dir
+from ..shared_telegram import strip_account_telegram_values
 
 router = APIRouter()
+CurrentAccount = Annotated[dict[str, Any], Depends(get_active_account)]
 
 
 def _parse_env_value(raw: str) -> str:
@@ -125,7 +128,7 @@ class SavePresetRequest(BaseModel):
 
 @router.get("")
 @router.get("/")
-async def get_config(account: dict = Depends(get_active_account)):
+async def get_config(account: CurrentAccount):
     """Get current bot configuration.
 
     Uses cached runtime values.
@@ -147,7 +150,7 @@ async def get_config(account: dict = Depends(get_active_account)):
 
 @router.put("")
 @router.put("/")
-async def save_config(request: SaveConfigRequest, account: dict = Depends(get_active_account)):
+async def save_config(request: SaveConfigRequest, account: CurrentAccount):
     """Save bot configuration.
 
     Always saves to cache. Optionally writes to .env file.
@@ -180,7 +183,7 @@ async def save_config(request: SaveConfigRequest, account: dict = Depends(get_ac
 
 
 @router.get("/presets")
-async def list_presets(account: dict = Depends(get_active_account)):
+async def list_presets(account: CurrentAccount):
     """List all saved presets."""
     try:
         presets_dir = account_presets_dir(account["id"])
@@ -219,7 +222,7 @@ async def list_presets(account: dict = Depends(get_active_account)):
 
 
 @router.get("/presets/{name}")
-async def get_preset(name: str, account: dict = Depends(get_active_account)):
+async def get_preset(name: str, account: CurrentAccount):
     """Get a specific preset by name."""
     try:
         presets_dir = account_presets_dir(account["id"])
@@ -234,7 +237,11 @@ async def get_preset(name: str, account: dict = Depends(get_active_account)):
 
         data = json.loads(preset_path.read_text(encoding="utf-8"))
         values_payload = data.get("values", {})
-        values = decode_config(values_payload, reveal_secrets=True) if isinstance(values_payload, dict) else {}
+        values = (
+            strip_account_telegram_values(decode_config(values_payload, reveal_secrets=True))
+            if isinstance(values_payload, dict)
+            else {}
+        )
         sanitized, configured_secrets = sanitize_config(values)
 
         # Update last preset
@@ -260,7 +267,7 @@ async def get_preset(name: str, account: dict = Depends(get_active_account)):
 
 
 @router.post("/presets")
-async def save_preset(request: SavePresetRequest, account: dict = Depends(get_active_account)):
+async def save_preset(request: SavePresetRequest, account: CurrentAccount):
     """Save a preset (create or update)."""
     try:
         if not request.name or not isinstance(request.name, str):
@@ -284,15 +291,23 @@ async def save_preset(request: SavePresetRequest, account: dict = Depends(get_ac
             except Exception:
                 pass
 
-        existing_values = existing.get("values", {}) if isinstance(existing, dict) else {}
+        existing_values_payload = existing.get("values", {}) if isinstance(existing, dict) else {}
+        existing_values = (
+            strip_account_telegram_values(
+                decode_config(existing_values_payload, reveal_secrets=True)
+            )
+            if isinstance(existing_values_payload, dict)
+            else {}
+        )
+        preset_values = strip_account_telegram_values(request.values or {})
 
         data = {
             "name": request.name,
             "created_at": created_at,
             "modified_at": now,
             "values": encode_config(
-                request.values or {},
-                existing_payload=existing_values if isinstance(existing_values, dict) else {},
+                preset_values,
+                existing_payload=encode_config(existing_values, preserve_blank_secrets=False),
             ),
         }
 
@@ -309,7 +324,7 @@ async def save_preset(request: SavePresetRequest, account: dict = Depends(get_ac
 
 
 @router.delete("/presets/{name}")
-async def delete_preset(name: str, account: dict = Depends(get_active_account)):
+async def delete_preset(name: str, account: CurrentAccount):
     """Delete a preset by name."""
     try:
         presets_dir = account_presets_dir(account["id"])

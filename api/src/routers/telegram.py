@@ -3,20 +3,23 @@
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..account_store import get_active_account, load_account_config
-from ..runtime_data import account_telegram_session_path
+from ..account_store import get_active_account
+from ..runtime_data import shared_telegram_session_path
+from ..shared_telegram import shared_telegram_config
 
 router = APIRouter()
+CurrentAccount = Annotated[dict[str, Any], Depends(get_active_account)]
 
 
 @router.get("/channels")
 async def get_telegram_channels(
+    account: CurrentAccount,
     api_id: int | None = None,
     api_hash: str | None = None,
-    account: dict = Depends(get_active_account),
 ):
     """Get list of available Telegram channels/groups.
 
@@ -29,19 +32,26 @@ async def get_telegram_channels(
     - username: Username for public channels (optional)
     - type: "channel" | "group"
     """
-    session_path = account_telegram_session_path(account["id"])
+    _ = account
+    session_path = shared_telegram_session_path()
     if not session_path.exists():
         raise HTTPException(
             status_code=404,
-            detail="Telegram session not found. Please run the bot first to create a session.",
+            detail=(
+                "Shared Telegram session not found. Configure the server Telegram session first."
+            ),
         )
 
-    config = load_account_config(account["id"], reveal_secrets=True)
-    resolved_api_id = api_id or int(config.get("TELEGRAM_API_ID") or 0)
-    resolved_api_hash = api_hash or config.get("TELEGRAM_API_HASH") or ""
+    _ = api_id, api_hash
+    config = shared_telegram_config()
+    resolved_api_id = int(config.get("TELEGRAM_API_ID") or 0)
+    resolved_api_hash = config.get("TELEGRAM_API_HASH") or ""
 
     if resolved_api_id <= 0 or not resolved_api_hash:
-        raise HTTPException(status_code=400, detail="Invalid API credentials")
+        raise HTTPException(
+            status_code=400,
+            detail="Shared Telegram API credentials are not configured",
+        )
 
     try:
         from telethon import TelegramClient

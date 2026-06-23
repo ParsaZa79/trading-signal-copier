@@ -111,10 +111,6 @@ export interface MT5ConnectResponse {
 
 // Bot Configuration types
 export interface BotConfig {
-  // Telegram settings
-  TELEGRAM_API_ID: string;
-  TELEGRAM_API_HASH: string;
-  TELEGRAM_CHANNEL: string;
   // MT5 settings
   MT5_LOGIN: string;
   MT5_PASSWORD: string;

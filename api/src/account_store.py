@@ -37,12 +37,15 @@ from .security import (
     get_requested_account_id,
     set_active_account_id,
 )
+from .shared_telegram import (
+    shared_telegram_missing_fields,
+    strip_account_telegram_values,
+)
 
 ACCOUNTS_PATH = DATA_DIR / "accounts.json"
 MASKED_SECRET = "__configured_secret__"
 SETUP_COMPLETED_KEY = "SETUP_COMPLETED_AT"
 BROKER_SETUP_FIELDS = ("MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER")
-TELEGRAM_SETUP_FIELDS = ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_CHANNEL")
 
 SECRET_FIELD_NAMES = {
     "MT5_PASSWORD",
@@ -198,21 +201,32 @@ def _read_env_file() -> dict[str, str]:
 def load_account_config(account_id: str, *, reveal_secrets: bool) -> dict[str, str]:
     path = account_config_path(account_id)
     payload = _read_json(path, {})
-    return decode_config(payload, reveal_secrets=reveal_secrets)
+    return strip_account_telegram_values(decode_config(payload, reveal_secrets=reveal_secrets))
 
 
 def save_account_config(account_id: str, values: dict[str, Any]) -> dict[str, str]:
     path = account_config_path(account_id)
     existing = _read_json(path, {})
-    payload = encode_config(values, existing_payload=existing, preserve_blank_secrets=True)
+    merged = strip_account_telegram_values(decode_config(existing, reveal_secrets=True))
+
+    for key, raw_value in strip_account_telegram_values(values).items():
+        value = "" if raw_value is None else str(raw_value)
+        if is_secret_key(str(key)) and value in {"", MASKED_SECRET}:
+            continue
+        merged[str(key)] = value
+
+    payload = encode_config(merged, preserve_blank_secrets=False)
     _write_json(path, payload)
     return decode_config(payload, reveal_secrets=True)
 
 
 def _is_account_setup_complete(account_id: str) -> bool:
     values = load_account_config(account_id, reveal_secrets=True)
-    required = (*BROKER_SETUP_FIELDS, *TELEGRAM_SETUP_FIELDS)
-    return bool(values.get(SETUP_COMPLETED_KEY)) and all(values.get(key) for key in required)
+    return (
+        bool(values.get(SETUP_COMPLETED_KEY))
+        and all(values.get(key) for key in BROKER_SETUP_FIELDS)
+        and not shared_telegram_missing_fields()
+    )
 
 
 def _sanitize_account(account: dict[str, Any], *, include_setup: bool = True) -> dict[str, Any]:
@@ -347,7 +361,7 @@ def ensure_default_account(user: dict[str, Any]) -> dict[str, Any]:
 def account_setup_status(account: dict[str, Any]) -> dict[str, Any]:
     values = load_account_config(account["id"], reveal_secrets=True)
     broker_missing = [key for key in BROKER_SETUP_FIELDS if not values.get(key)]
-    telegram_missing = [key for key in TELEGRAM_SETUP_FIELDS if not values.get(key)]
+    telegram_missing = shared_telegram_missing_fields()
     missing_fields = [*broker_missing, *telegram_missing]
     if not values.get(SETUP_COMPLETED_KEY):
         missing_fields.append(SETUP_COMPLETED_KEY)
@@ -387,9 +401,13 @@ def mark_account_setup_complete(account_id: str) -> dict[str, Any]:
         raise ValueError("Account not found")
 
     values = load_account_config(account_id, reveal_secrets=True)
-    missing = [key for key in (*BROKER_SETUP_FIELDS, *TELEGRAM_SETUP_FIELDS) if not values.get(key)]
+    missing = [key for key in BROKER_SETUP_FIELDS if not values.get(key)]
     if missing:
-        raise ValueError(f"Missing setup fields: {', '.join(missing)}")
+        raise ValueError(f"Missing broker setup fields: {', '.join(missing)}")
+
+    shared_missing = shared_telegram_missing_fields()
+    if shared_missing:
+        raise ValueError(f"Shared Telegram configuration is missing: {', '.join(shared_missing)}")
 
     save_account_config(account_id, {SETUP_COMPLETED_KEY: _utc_now()})
     return account_setup_status(account)

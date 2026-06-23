@@ -100,6 +100,23 @@ def account_telegram_session_path(account_id: str) -> Path:
     return account_telegram_session_name(account_id).with_suffix(".session")
 
 
+def shared_telegram_session_name() -> Path:
+    """Return the shared Telegram session base path without the .session suffix."""
+    data_session = DATA_DIR / "signal_bot_session"
+    bot_session = BOT_DIR / "signal_bot_session"
+    if (
+        data_session.with_suffix(".session").exists()
+        or not bot_session.with_suffix(".session").exists()
+    ):
+        return data_session
+    return bot_session
+
+
+def shared_telegram_session_path() -> Path:
+    """Return the shared Telegram .session path."""
+    return shared_telegram_session_name().with_suffix(".session")
+
+
 def _copy_file_if_missing(source: Path, target: Path) -> None:
     if not source.exists() or target.exists():
         return

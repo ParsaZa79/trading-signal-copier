@@ -7,7 +7,6 @@ import {
   Check,
   ExternalLink,
   Loader2,
-  Send,
   Server,
   WalletCards,
 } from "lucide-react";
@@ -33,9 +32,6 @@ import {
 } from "@/lib/api";
 
 const EMPTY_CONFIG = {
-  TELEGRAM_API_ID: "",
-  TELEGRAM_API_HASH: "",
-  TELEGRAM_CHANNEL: "",
   MT5_LOGIN: "",
   MT5_PASSWORD: "",
   MT5_SERVER: "",
@@ -78,9 +74,6 @@ export default function SetupPage() {
         const result = await getBotConfig();
         if (cancelled || !result.success) return;
         setConfig({
-          TELEGRAM_API_ID: result.config.TELEGRAM_API_ID || "",
-          TELEGRAM_API_HASH: result.config.TELEGRAM_API_HASH || "",
-          TELEGRAM_CHANNEL: result.config.TELEGRAM_CHANNEL || "",
           MT5_LOGIN: result.config.MT5_LOGIN || "",
           MT5_PASSWORD: result.config.MT5_PASSWORD || "",
           MT5_SERVER: result.config.MT5_SERVER || "",
@@ -110,11 +103,6 @@ export default function SetupPage() {
   const validate = () => {
     const missing: string[] = [];
     if (!session.activeAccountId && !accountName.trim()) missing.push("account name");
-    if (!config.TELEGRAM_API_ID.trim()) missing.push("Telegram API ID");
-    if (!config.TELEGRAM_API_HASH.trim() && !configuredSecrets.includes("TELEGRAM_API_HASH")) {
-      missing.push("Telegram API hash");
-    }
-    if (!config.TELEGRAM_CHANNEL.trim()) missing.push("Telegram channel");
     if (!config.MT5_LOGIN.trim() || Number.isNaN(Number(config.MT5_LOGIN))) {
       missing.push("MT5 login");
     }
@@ -184,8 +172,8 @@ export default function SetupPage() {
       <AnimatedSection>
         <PageHeader
           meta="Account setup"
-          title="Connect your broker and Telegram"
-          description="Complete this once for each trading account before opening the dashboard."
+          title="Connect your broker"
+          description="Complete this once for each trading account. The Telegram signal source is managed by the platform."
         />
       </AnimatedSection>
 
@@ -206,45 +194,6 @@ export default function SetupPage() {
                 disabled={Boolean(session.activeAccountId) || isSubmitting}
                 placeholder="Live Account"
               />
-            </PanelBody>
-          </SectionPanel>
-
-          <SectionPanel>
-            <PanelHeader
-              eyebrow="Telegram"
-              title="Signal source"
-              description="Use the channel or group where trading signals arrive"
-              action={<Send className="h-5 w-5 text-info" />}
-            />
-            <PanelBody>
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input
-                  label="API ID"
-                  value={config.TELEGRAM_API_ID}
-                  onChange={(event) => updateField("TELEGRAM_API_ID", event.target.value)}
-                  placeholder="123456"
-                  disabled={isSubmitting}
-                />
-                <Input
-                  label="API Hash"
-                  type="password"
-                  value={config.TELEGRAM_API_HASH}
-                  onChange={(event) => updateField("TELEGRAM_API_HASH", event.target.value)}
-                  placeholder={
-                    configuredSecrets.includes("TELEGRAM_API_HASH") ? "Configured" : "API hash"
-                  }
-                  disabled={isSubmitting}
-                />
-                <div className="md:col-span-2">
-                  <Input
-                    label="Signal channel"
-                    value={config.TELEGRAM_CHANNEL}
-                    onChange={(event) => updateField("TELEGRAM_CHANNEL", event.target.value)}
-                    placeholder="@channel, username, or numeric ID"
-                    disabled={isSubmitting}
-                  />
-                </div>
-              </div>
             </PanelBody>
           </SectionPanel>
 
@@ -311,7 +260,6 @@ export default function SetupPage() {
             <PanelHeader eyebrow="Guide" title="Setup links" />
             <PanelBody>
               <div className="space-y-3">
-                <GuideLink href="https://my.telegram.org/apps" label="Telegram API credentials" />
                 <GuideLink href="https://www.metatrader5.com/en/download" label="MetaTrader 5 terminal" />
               </div>
             </PanelBody>
@@ -321,15 +269,7 @@ export default function SetupPage() {
             <PanelHeader eyebrow="Checklist" title="Before continuing" />
             <PanelBody>
               <div className="space-y-3 text-sm text-text-secondary">
-                <ChecklistItem done={Boolean(config.TELEGRAM_API_ID.trim())} label="Telegram API ID entered" />
-                <ChecklistItem
-                  done={
-                    Boolean(config.TELEGRAM_API_HASH.trim()) ||
-                    configuredSecrets.includes("TELEGRAM_API_HASH")
-                  }
-                  label="Telegram API hash saved"
-                />
-                <ChecklistItem done={Boolean(config.TELEGRAM_CHANNEL.trim())} label="Signal channel selected" />
+                <ChecklistItem done label="Telegram signal source managed by platform" />
                 <ChecklistItem done={Boolean(config.MT5_LOGIN.trim())} label="Broker login entered" />
                 <ChecklistItem
                   done={Boolean(config.MT5_PASSWORD.trim()) || configuredSecrets.includes("MT5_PASSWORD")}
