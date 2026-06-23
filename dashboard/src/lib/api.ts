@@ -2,11 +2,11 @@ import { API_URL } from "./constants";
 import {
   clearStoredSession,
   getActiveAccountId,
-  getAuthToken,
   storeSession,
   type AuthSession,
   type DashboardAccount,
 } from "./auth-storage";
+import { getApiToken } from "./clerk-token";
 import type {
   Position,
   AccountInfo,
@@ -37,7 +37,7 @@ async function fetchApi<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const token = getAuthToken();
+  const token = await getApiToken();
   if (token) {
     headers.set("Authorization", `Bearer ${token}`);
   }
@@ -117,7 +117,7 @@ export async function getMe(): Promise<AuthSession> {
     accounts: DashboardAccount[];
     active_account_id: string;
   }>("/api/auth/me");
-  const existing = getAuthToken();
+  const existing = await getApiToken();
   if (!existing) {
     throw new Error("Authentication required");
   }
@@ -163,6 +163,63 @@ export async function activateAccount(accountId: string): Promise<{
 }> {
   return fetchApi(`/api/accounts/${encodeURIComponent(accountId)}/active`, {
     method: "PUT",
+  });
+}
+
+export interface AccessMember {
+  id: string;
+  clerk_user_id?: string | null;
+  email: string;
+  role: "owner" | "admin" | "trader" | "viewer";
+  status: "active" | "disabled" | "pending";
+  active_account_id?: string | null;
+  invited_by?: string | null;
+  invitation_id?: string | null;
+  invitation_status?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  last_seen_at?: string;
+}
+
+export async function getAccessMembers(): Promise<{
+  success: boolean;
+  members: AccessMember[];
+  roles: AccessMember["role"][];
+  clerk: { enabled: boolean; invitations_enabled: boolean };
+}> {
+  return fetchApi("/api/access");
+}
+
+export async function inviteAccessMember(
+  email: string,
+  role: AccessMember["role"],
+  redirectUrl?: string
+): Promise<{ success: boolean; member: AccessMember; members: AccessMember[] }> {
+  return fetchApi("/api/access/members", {
+    method: "POST",
+    body: JSON.stringify({
+      email,
+      role,
+      redirect_url: redirectUrl,
+    }),
+  });
+}
+
+export async function updateAccessMember(
+  memberId: string,
+  update: { role?: AccessMember["role"]; status?: AccessMember["status"] }
+): Promise<{ success: boolean; member: AccessMember; members: AccessMember[] }> {
+  return fetchApi(`/api/access/members/${encodeURIComponent(memberId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(update),
+  });
+}
+
+export async function deleteAccessMember(
+  memberId: string
+): Promise<{ success: boolean; members: AccessMember[] }> {
+  return fetchApi(`/api/access/members/${encodeURIComponent(memberId)}`, {
+    method: "DELETE",
   });
 }
 

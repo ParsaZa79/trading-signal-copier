@@ -47,6 +47,7 @@ from .dependencies import (
     set_mt5_executor_factory,
 )
 from .routers import (
+    access,
     account,
     accounts,
     analysis,
@@ -135,6 +136,7 @@ app.add_middleware(
 # Include routers
 protected = [Depends(get_current_user)]
 app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(access.router, prefix="/api/access", tags=["Access"], dependencies=protected)
 app.include_router(accounts.router, prefix="/api/accounts", tags=["Accounts"], dependencies=protected)
 app.include_router(health.router, prefix="/api/health", tags=["Health"], dependencies=protected)
 app.include_router(mt5.router, prefix="/api/mt5", tags=["MT5"], dependencies=protected)

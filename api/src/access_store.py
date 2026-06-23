@@ -1,0 +1,355 @@
+"""Application access records for Clerk-authenticated users."""
+
+from __future__ import annotations
+
+import json
+import os
+import secrets
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from fastapi import HTTPException, status
+
+from .clerk_client import clerk_enabled
+from .runtime_data import DATA_DIR
+
+ACCESS_PATH = DATA_DIR / "access.json"
+LEGACY_USERS_PATH = DATA_DIR / "users.json"
+ACCOUNTS_PATH = DATA_DIR / "accounts.json"
+
+ACCESS_ROLES = {"owner", "admin", "trader", "viewer"}
+ACCESS_STATUSES = {"active", "disabled", "pending"}
+ACCESS_ADMIN_ROLES = {"owner", "admin"}
+
+
+def _utc_now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _read_json(path: Path, default: dict[str, Any]) -> dict[str, Any]:
+    if not path.exists():
+        return default
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+    return data if isinstance(data, dict) else default
+
+
+def _write_json(path: Path, data: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+
+
+def _load_store() -> dict[str, Any]:
+    store = _read_json(ACCESS_PATH, {"members": {}})
+    if not isinstance(store.get("members"), dict):
+        store["members"] = {}
+    return store
+
+
+def _save_store(store: dict[str, Any]) -> None:
+    _write_json(ACCESS_PATH, store)
+
+
+def _clean_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def _sanitize_member(member: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": member["id"],
+        "clerk_user_id": member.get("clerk_user_id"),
+        "email": member["email"],
+        "role": member.get("role", "trader"),
+        "status": member.get("status", "active"),
+        "active_account_id": member.get("active_account_id"),
+        "invited_by": member.get("invited_by"),
+        "invitation_id": member.get("invitation_id"),
+        "invitation_status": member.get("invitation_status"),
+        "created_at": member.get("created_at"),
+        "updated_at": member.get("updated_at"),
+        "last_seen_at": member.get("last_seen_at"),
+    }
+
+
+def _bootstrap_emails() -> set[str]:
+    raw = os.getenv("ACCESS_BOOTSTRAP_EMAILS", "")
+    return {_clean_email(item) for item in raw.split(",") if item.strip()}
+
+
+def _legacy_user_for_email(email: str) -> dict[str, Any] | None:
+    store = _read_json(LEGACY_USERS_PATH, {"users": {}})
+    for user in store.get("users", {}).values():
+        if isinstance(user, dict) and user.get("email", "").lower() == email:
+            return dict(user)
+    return None
+
+
+def _migrate_legacy_accounts(old_user_id: str, new_user_id: str) -> str | None:
+    store = _read_json(ACCOUNTS_PATH, {"accounts": {}})
+    changed = False
+    for account in store.get("accounts", {}).values():
+        if isinstance(account, dict) and account.get("user_id") == old_user_id:
+            account["user_id"] = new_user_id
+            account["updated_at"] = _utc_now()
+            changed = True
+    if changed:
+        _write_json(ACCOUNTS_PATH, store)
+
+    legacy_user = _read_json(LEGACY_USERS_PATH, {"users": {}}).get("users", {}).get(old_user_id)
+    if isinstance(legacy_user, dict):
+        active = legacy_user.get("active_account_id")
+        return str(active) if active else None
+    return None
+
+
+def list_members() -> list[dict[str, Any]]:
+    members = [_sanitize_member(member) for member in _load_store()["members"].values()]
+    return sorted(members, key=lambda item: (item.get("created_at") or "", item["email"]))
+
+
+def get_member(member_id: str) -> dict[str, Any] | None:
+    member = _load_store()["members"].get(member_id)
+    return _sanitize_member(member) if isinstance(member, dict) else None
+
+
+def _member_by_email(store: dict[str, Any], email: str) -> dict[str, Any] | None:
+    for member in store["members"].values():
+        if isinstance(member, dict) and member.get("email", "").lower() == email:
+            return member
+    return None
+
+
+def _member_by_clerk_id(store: dict[str, Any], clerk_user_id: str) -> dict[str, Any] | None:
+    member = store["members"].get(clerk_user_id)
+    if isinstance(member, dict):
+        return member
+    for item in store["members"].values():
+        if isinstance(item, dict) and item.get("clerk_user_id") == clerk_user_id:
+            return item
+    return None
+
+
+def _owner_count(store: dict[str, Any], *, exclude_member_id: str | None = None) -> int:
+    return sum(
+        1
+        for member_id, member in store["members"].items()
+        if member_id != exclude_member_id
+        and isinstance(member, dict)
+        and member.get("role") == "owner"
+        and member.get("status") == "active"
+    )
+
+
+def _create_member(
+    store: dict[str, Any],
+    *,
+    member_id: str,
+    email: str,
+    role: str,
+    status_value: str,
+    clerk_user_id: str | None = None,
+    invited_by: str | None = None,
+    invitation_id: str | None = None,
+    invitation_status: str | None = None,
+    active_account_id: str | None = None,
+) -> dict[str, Any]:
+    now = _utc_now()
+    member = {
+        "id": member_id,
+        "clerk_user_id": clerk_user_id,
+        "email": email,
+        "role": role,
+        "status": status_value,
+        "active_account_id": active_account_id,
+        "invited_by": invited_by,
+        "invitation_id": invitation_id,
+        "invitation_status": invitation_status,
+        "created_at": now,
+        "updated_at": now,
+    }
+    store["members"][member_id] = member
+    return member
+
+
+def resolve_clerk_member(clerk_user_id: str, email: str | None = None) -> dict[str, Any]:
+    """Return the local access member for a verified Clerk identity."""
+    clean_email = _clean_email(email or "")
+    if not clerk_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    store = _load_store()
+    member = _member_by_clerk_id(store, clerk_user_id)
+    if member is not None:
+        if member.get("status") != "active":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
+        if clean_email:
+            member["email"] = clean_email
+        member["last_seen_at"] = _utc_now()
+        member["updated_at"] = _utc_now()
+        _save_store(store)
+        return _sanitize_member(member)
+
+    if not clean_email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    invited = _member_by_email(store, clean_email)
+    if invited is not None and invited.get("status") in {"pending", "active"}:
+        old_id = str(invited["id"])
+        invited["id"] = clerk_user_id
+        invited["clerk_user_id"] = clerk_user_id
+        invited["email"] = clean_email
+        invited["status"] = "active"
+        invited["invitation_status"] = "accepted"
+        invited["last_seen_at"] = _utc_now()
+        invited["updated_at"] = _utc_now()
+        if old_id != clerk_user_id:
+            store["members"].pop(old_id, None)
+            store["members"][clerk_user_id] = invited
+        _save_store(store)
+        return _sanitize_member(invited)
+
+    if store["members"]:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
+
+    allowed_bootstrap = _bootstrap_emails()
+    legacy_user = _legacy_user_for_email(clean_email)
+    if allowed_bootstrap and clean_email not in allowed_bootstrap:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
+    if not allowed_bootstrap and legacy_user is None:
+        # Empty deployments still need a recovery path, but existing deployments
+        # should bootstrap only from the old admin email or ACCESS_BOOTSTRAP_EMAILS.
+        legacy_active_account_id = None
+    else:
+        legacy_active_account_id = (
+            _migrate_legacy_accounts(str(legacy_user["id"]), clerk_user_id)
+            if legacy_user is not None
+            else None
+        )
+
+    member = _create_member(
+        store,
+        member_id=clerk_user_id,
+        clerk_user_id=clerk_user_id,
+        email=clean_email,
+        role="owner",
+        status_value="active",
+        active_account_id=legacy_active_account_id,
+    )
+    member["last_seen_at"] = _utc_now()
+    _save_store(store)
+    return _sanitize_member(member)
+
+
+def set_member_active_account_id(member_id: str, account_id: str | None) -> None:
+    store = _load_store()
+    member = store["members"].get(member_id)
+    if not isinstance(member, dict):
+        raise ValueError("Member not found")
+    member["active_account_id"] = account_id
+    member["updated_at"] = _utc_now()
+    _save_store(store)
+
+
+def require_access_admin(user: dict[str, Any]) -> None:
+    if not clerk_enabled() and user.get("auth_provider") != "clerk":
+        return
+    if user.get("role") not in ACCESS_ADMIN_ROLES or user.get("status") != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+
+
+def invite_member(
+    *,
+    email: str,
+    role: str,
+    invited_by: str,
+    invitation_id: str | None = None,
+    invitation_status: str | None = None,
+) -> dict[str, Any]:
+    clean_email = _clean_email(email)
+    if not clean_email or "@" not in clean_email:
+        raise ValueError("Enter a valid email address")
+    if role not in ACCESS_ROLES:
+        raise ValueError("Invalid role")
+
+    store = _load_store()
+    member = _member_by_email(store, clean_email)
+    if member is None:
+        member = _create_member(
+            store,
+            member_id=f"pending_{secrets.token_urlsafe(10)}",
+            email=clean_email,
+            role=role,
+            status_value="pending",
+            invited_by=invited_by,
+            invitation_id=invitation_id,
+            invitation_status=invitation_status or "pending",
+        )
+    else:
+        member["role"] = role
+        member["status"] = "pending" if not member.get("clerk_user_id") else "active"
+        member["invited_by"] = invited_by
+        member["invitation_id"] = invitation_id or member.get("invitation_id")
+        member["invitation_status"] = invitation_status or member.get("invitation_status")
+        member["updated_at"] = _utc_now()
+
+    _save_store(store)
+    return _sanitize_member(member)
+
+
+def _is_last_active_owner(store: dict[str, Any], member_id: str) -> bool:
+    member = store["members"].get(member_id)
+    return (
+        isinstance(member, dict)
+        and member.get("role") == "owner"
+        and _owner_count(store, exclude_member_id=member_id) == 0
+    )
+
+
+def update_member(
+    member_id: str,
+    *,
+    role: str | None = None,
+    status_value: str | None = None,
+) -> dict[str, Any]:
+    store = _load_store()
+    member = store["members"].get(member_id)
+    if not isinstance(member, dict):
+        raise ValueError("Member not found")
+
+    if role is not None:
+        if role not in ACCESS_ROLES:
+            raise ValueError("Invalid role")
+        if role != "owner" and _is_last_active_owner(store, member_id):
+            raise ValueError("At least one active owner is required")
+        member["role"] = role
+
+    if status_value is not None:
+        if status_value not in ACCESS_STATUSES:
+            raise ValueError("Invalid status")
+        if status_value != "active" and _is_last_active_owner(store, member_id):
+            raise ValueError("At least one active owner is required")
+        member["status"] = status_value
+
+    member["updated_at"] = _utc_now()
+    _save_store(store)
+    return _sanitize_member(member)
+
+
+def remove_member(member_id: str) -> None:
+    store = _load_store()
+    member = store["members"].get(member_id)
+    if not isinstance(member, dict):
+        raise ValueError("Member not found")
+    if member.get("role") == "owner" and _owner_count(store, exclude_member_id=member_id) == 0:
+        raise ValueError("At least one active owner is required")
+    store["members"].pop(member_id, None)
+    _save_store(store)

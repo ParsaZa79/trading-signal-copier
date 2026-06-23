@@ -13,6 +13,7 @@ import {
   Bot,
   Sliders,
   BarChart3,
+  ShieldCheck,
 } from "lucide-react";
 
 const navItems = [
@@ -23,6 +24,7 @@ const navItems = [
   { href: "/analysis", label: "Analysis", icon: BarChart3 },
   { href: "/orders", label: "Orders", icon: Plus },
   { href: "/history", label: "History", icon: History },
+  { href: "/access", label: "Access", icon: ShieldCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

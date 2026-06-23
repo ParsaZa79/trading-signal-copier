@@ -3,13 +3,16 @@ import json
 import pytest
 from fastapi import HTTPException
 
-from src import account_store, dependencies, runtime_data, security
+from src import access_store, account_store, dependencies, runtime_data, security
 
 
 def _isolate_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(security, "USERS_PATH", tmp_path / "users.json")
     monkeypatch.setattr(security, "DEV_SECRET_PATH", tmp_path / ".dev_app_secret")
     monkeypatch.setattr(account_store, "ACCOUNTS_PATH", tmp_path / "accounts.json")
+    monkeypatch.setattr(access_store, "ACCESS_PATH", tmp_path / "access.json")
+    monkeypatch.setattr(access_store, "LEGACY_USERS_PATH", tmp_path / "users.json")
+    monkeypatch.setattr(access_store, "ACCOUNTS_PATH", tmp_path / "accounts.json")
     monkeypatch.setattr(runtime_data, "DATA_DIR", tmp_path)
     monkeypatch.setattr(runtime_data, "ACCOUNTS_DIR", tmp_path / "accounts")
 
@@ -91,6 +94,59 @@ def test_accounts_are_isolated(monkeypatch, tmp_path):
     assert first_config["MT5_PASSWORD"] == "one"
     assert second_config["MT5_LOGIN"] == "222"
     assert second_config["MT5_PASSWORD"] == "two"
+
+
+def test_clerk_owner_bootstrap_migrates_legacy_accounts(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
+
+    legacy_user = security.create_user("owner@example.com", "correct horse battery")
+    legacy_account = account_store.ensure_default_account(legacy_user)
+
+    member = access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+
+    assert member["id"] == "user_clerk_owner"
+    assert member["role"] == "owner"
+    assert member["status"] == "active"
+    assert member["active_account_id"] == legacy_account["id"]
+    assert account_store.get_account(legacy_account["id"], "user_clerk_owner") is not None
+    assert account_store.get_account(legacy_account["id"], legacy_user["id"]) is None
+
+
+def test_invited_clerk_user_links_pending_access(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
+
+    pending = access_store.invite_member(
+        email="trader@example.com",
+        role="trader",
+        invited_by="user_clerk_owner",
+        invitation_id="inv_123",
+        invitation_status="pending",
+    )
+
+    member = access_store.resolve_clerk_member("user_clerk_trader", "trader@example.com")
+    members = access_store.list_members()
+
+    assert pending["status"] == "pending"
+    assert member["id"] == "user_clerk_trader"
+    assert member["clerk_user_id"] == "user_clerk_trader"
+    assert member["status"] == "active"
+    assert member["invitation_status"] == "accepted"
+    assert len(members) == 1
+
+
+def test_access_store_keeps_at_least_one_active_owner(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
+
+    owner = access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+
+    with pytest.raises(ValueError, match="At least one active owner"):
+        access_store.update_member(owner["id"], status_value="disabled")
+
+    with pytest.raises(ValueError, match="At least one active owner"):
+        access_store.remove_member(owner["id"])
 
 
 class _RuntimeExecutor:

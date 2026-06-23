@@ -54,7 +54,12 @@ def _auth_response(user: dict, response: Response) -> AuthResponse:
 
 @router.get("/bootstrap")
 async def bootstrap_status() -> dict:
-    return {"setup_required": not has_users()}
+    from ..clerk_client import clerk_enabled
+
+    return {
+        "setup_required": False if clerk_enabled() else not has_users(),
+        "auth_provider": "clerk" if clerk_enabled() else "local",
+    }
 
 
 @router.post("/setup", response_model=AuthResponse)

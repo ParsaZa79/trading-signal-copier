@@ -16,6 +16,7 @@ from typing import Any
 from fastapi import Depends, Header, HTTPException, Request, WebSocket, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from .clerk_client import clerk_enabled, get_clerk_user_email, verify_clerk_token
 from .runtime_data import DATA_DIR
 
 USERS_PATH = DATA_DIR / "users.json"
@@ -161,7 +162,10 @@ def set_active_account_id(user_id: str, account_id: str | None) -> None:
     store = _load_users_store()
     user = store.get("users", {}).get(user_id)
     if not isinstance(user, dict):
-        raise ValueError("User not found")
+        from .access_store import set_member_active_account_id
+
+        set_member_active_account_id(user_id, account_id)
+        return
     user["active_account_id"] = account_id
     user["updated_at"] = _utc_now()
     _save_users_store(store)
@@ -171,6 +175,9 @@ def sanitize_user(user: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": user["id"],
         "email": user["email"],
+        "role": user.get("role") or "owner",
+        "status": user.get("status") or "active",
+        "auth_provider": user.get("auth_provider") or "local",
         "active_account_id": user.get("active_account_id"),
         "created_at": user.get("created_at"),
     }
@@ -228,6 +235,43 @@ def _token_from_authorization_header(authorization: str | None) -> str | None:
     return authorization[len(prefix) :].strip() or None
 
 
+def _clerk_user_from_token(token: str | None) -> dict[str, Any] | None:
+    if not clerk_enabled() or not token:
+        return None
+
+    claims = verify_clerk_token(token)
+    if not claims:
+        return None
+
+    clerk_user_id = str(claims.get("sub") or "")
+    if not clerk_user_id:
+        return None
+
+    from .access_store import resolve_clerk_member
+
+    email = _clerk_email_from_claims(claims)
+    try:
+        member = resolve_clerk_member(clerk_user_id, email)
+    except HTTPException as error:
+        if email or error.status_code != status.HTTP_401_UNAUTHORIZED:
+            raise
+        email = get_clerk_user_email(clerk_user_id)
+        if not email:
+            return None
+        member = resolve_clerk_member(clerk_user_id, email)
+    member["auth_provider"] = "clerk"
+    member["session_id"] = claims.get("sid")
+    return member
+
+
+def _clerk_email_from_claims(claims: dict[str, Any]) -> str | None:
+    for key in ("email", "email_address", "primary_email_address"):
+        value = claims.get(key)
+        if isinstance(value, str) and value:
+            return value.lower()
+    return None
+
+
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
@@ -235,6 +279,11 @@ async def get_current_user(
     token = credentials.credentials if credentials else None
     if token is None:
         token = request.cookies.get("sc_session")
+
+    clerk_user = _clerk_user_from_token(token)
+    if clerk_user is not None:
+        return clerk_user
+
     payload = decode_token(token or "")
     if not payload:
         raise HTTPException(
@@ -257,6 +306,11 @@ def current_user_for_websocket(websocket: WebSocket) -> dict[str, Any] | None:
         token = _token_from_authorization_header(websocket.headers.get("authorization"))
     if not token:
         token = websocket.cookies.get("sc_session")
+
+    clerk_user = _clerk_user_from_token(token)
+    if clerk_user is not None:
+        return clerk_user
+
     payload = decode_token(token or "")
     if not payload:
         return None

@@ -1,6 +1,9 @@
 export interface DashboardUser {
   id: string;
   email: string;
+  role?: "owner" | "admin" | "trader" | "viewer";
+  status?: "active" | "disabled" | "pending";
+  auth_provider?: "local" | "clerk";
   active_account_id?: string | null;
   created_at?: string;
 }

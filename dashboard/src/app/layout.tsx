@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { ClerkRootProvider } from "@/components/auth/clerk-root-provider";
 import { DashboardLayout } from "@/components/layout/dashboard-layout";
 
 const jetbrainsMono = JetBrains_Mono({
@@ -24,7 +25,9 @@ export default function RootLayout({
       <body
         className={`${jetbrainsMono.variable} font-sans antialiased bg-mesh noise-overlay`}
       >
-        <DashboardLayout>{children}</DashboardLayout>
+        <ClerkRootProvider>
+          <DashboardLayout>{children}</DashboardLayout>
+        </ClerkRootProvider>
       </body>
     </html>
   );

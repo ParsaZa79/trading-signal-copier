@@ -31,9 +31,12 @@ Configure `dashboard/.env.local` as needed:
 ```dotenv
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=
 ```
 
 If omitted, these defaults are used by `src/lib/constants.ts`.
+If `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` is set, the dashboard uses Clerk sign-in/sign-up
+pages and route protection. The API must also have `CLERK_SECRET_KEY` configured.
 
 ## Available Scripts
 

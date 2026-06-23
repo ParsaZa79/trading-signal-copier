@@ -40,6 +40,11 @@ From `src/config.py` / `.env.example`:
 - `DATABASE_URL`
 - `BOT_DATA_DIR` (persistent runtime config/presets/state directory)
 - `BOT_STATE_FILE`
+- `CLERK_SECRET_KEY` to enable Clerk API authentication and invitations
+- `CLERK_ISSUER` or `CLERK_JWKS_URL` for Clerk JWT verification when not using the default JWKS URL
+- `CLERK_JWT_KEY` for offline Clerk JWT verification with a PEM public key
+- `CLERK_AUTHORIZED_PARTIES` comma-separated allowed dashboard origins
+- `ACCESS_BOOTSTRAP_EMAILS` comma-separated emails allowed to become the first Clerk owner
 
 ## Main Endpoints
 
@@ -52,6 +57,7 @@ From `src/config.py` / `.env.example`:
 - Bot control/status: `/api/bot`
 - Runtime config/presets: `/api/config`
 - Analysis: `/api/analysis`
+- Access management: `/api/access`
 
 ## Persistence (Dokploy)
 

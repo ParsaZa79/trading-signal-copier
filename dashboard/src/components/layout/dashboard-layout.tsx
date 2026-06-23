@@ -1,6 +1,7 @@
 "use client";
 
 import { Sidebar } from "./sidebar";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { AuthScreen } from "@/components/auth/auth-screen";
 import { SymbolIcon } from "@/components/dashboard/symbol-icon";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,16 @@ import {
   getSymbolPrice,
   logout,
 } from "@/lib/api";
+import { CLERK_ENABLED } from "@/lib/auth-mode";
 import {
   clearStoredSession,
   getStoredSession,
   storeSession,
   type AuthSession,
 } from "@/lib/auth-storage";
+import { setClerkTokenProvider } from "@/lib/clerk-token";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { Position, AccountInfo } from "@/types";
 import { Bell, Search, ChevronDown, Loader2, LogOut, Plus, UserRound } from "lucide-react";
@@ -63,6 +68,19 @@ const HEADER_SYMBOLS = [
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  const pathname = usePathname();
+  if (pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) {
+    return <>{children}</>;
+  }
+
+  if (CLERK_ENABLED) {
+    return <ClerkDashboardLayout>{children}</ClerkDashboardLayout>;
+  }
+
+  return <LocalAuthDashboardLayout>{children}</LocalAuthDashboardLayout>;
+}
+
+function LocalAuthDashboardLayout({ children }: DashboardLayoutProps) {
   const [session, setSessionState] = useState<AuthSession | null>(null);
   const [setupRequired, setSetupRequired] = useState(false);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
@@ -135,14 +153,141 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   );
 }
 
+function ClerkDashboardLayout({ children }: DashboardLayoutProps) {
+  const { getToken, isLoaded, isSignedIn, signOut } = useAuth();
+  const { user } = useUser();
+  const [session, setSessionState] = useState<AuthSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [accessError, setAccessError] = useState<string | null>(null);
+
+  const setSession = useCallback((nextSession: AuthSession) => {
+    storeSession(nextSession);
+    setSessionState(nextSession);
+  }, []);
+
+  useEffect(() => {
+    if (!isLoaded) return;
+
+    if (!isSignedIn) {
+      clearStoredSession();
+      setSessionState(null);
+      setIsLoading(false);
+      return;
+    }
+
+    setClerkTokenProvider(() => getToken());
+
+    let cancelled = false;
+    async function loadSession() {
+      setIsLoading(true);
+      setAccessError(null);
+      try {
+        const token = await getToken();
+        if (!token) throw new Error("Authentication required");
+        const refreshed = await getMe();
+        if (!cancelled) {
+          setSession({
+            ...refreshed,
+            token,
+            user: {
+              ...refreshed.user,
+              email: refreshed.user.email || user?.primaryEmailAddress?.emailAddress || "",
+            },
+          });
+        }
+      } catch (error) {
+        clearStoredSession();
+        if (!cancelled) {
+          setSessionState(null);
+          setAccessError(error instanceof Error ? error.message : "Access not granted");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    }
+
+    loadSession();
+    return () => {
+      cancelled = true;
+      setClerkTokenProvider(null);
+    };
+  }, [getToken, isLoaded, isSignedIn, setSession, user?.primaryEmailAddress?.emailAddress]);
+
+  if (!isLoaded || isLoading) {
+    return (
+      <main className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <p className="text-sm text-text-muted">Loading dashboard...</p>
+      </main>
+    );
+  }
+
+  if (!isSignedIn) {
+    return <ClerkSignedOutScreen />;
+  }
+
+  if (accessError || !session) {
+    return (
+      <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-xl border border-border-subtle bg-bg-secondary p-6">
+          <p className="text-xs uppercase tracking-wider text-text-muted">Access</p>
+          <h1 className="mt-2 text-xl font-semibold text-text-primary">Access not granted</h1>
+          <p className="mt-2 text-sm text-text-muted">
+            Your Clerk sign-in worked, but this email is not allowed in the trading dashboard.
+          </p>
+          {accessError && <p className="mt-3 text-xs text-danger">{accessError}</p>}
+          <Button
+            className="mt-5"
+            variant="outline"
+            onClick={() => signOut({ redirectUrl: "/sign-in" })}
+          >
+            Sign out
+          </Button>
+        </div>
+      </main>
+    );
+  }
+
+  return (
+    <AuthenticatedDashboardLayout
+      session={session}
+      setSession={setSession}
+      onLogout={() => signOut({ redirectUrl: "/sign-in" })}
+    >
+      {children}
+    </AuthenticatedDashboardLayout>
+  );
+}
+
+function ClerkSignedOutScreen() {
+  return (
+    <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6">
+      <div className="w-full max-w-sm rounded-xl border border-border-subtle bg-bg-secondary p-6">
+        <p className="text-xs uppercase tracking-wider text-text-muted">Access</p>
+        <h1 className="mt-2 text-xl font-semibold text-text-primary">Sign in required</h1>
+        <p className="mt-2 text-sm text-text-muted">
+          Use your approved Clerk account to open the trading dashboard.
+        </p>
+        <Link
+          href="/sign-in"
+          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-text-primary px-4 text-sm font-semibold text-bg-primary hover:bg-text-secondary"
+        >
+          Sign in
+        </Link>
+      </div>
+    </main>
+  );
+}
+
 function AuthenticatedDashboardLayout({
   children,
   session,
   setSession,
+  onLogout,
 }: {
   children: ReactNode;
   session: AuthSession;
   setSession: (session: AuthSession) => void;
+  onLogout?: () => Promise<void> | void;
 }) {
   const { positions, account, isConnected, error, reconnect } = useWebSocket({
     enabled: true,
@@ -242,6 +387,10 @@ function AuthenticatedDashboardLayout({
   };
 
   const handleLogout = async () => {
+    if (onLogout) {
+      await onLogout();
+      return;
+    }
     await logout();
     window.location.reload();
   };
