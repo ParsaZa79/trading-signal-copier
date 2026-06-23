@@ -3,6 +3,8 @@
 import { Sidebar } from "./sidebar";
 import { AuthScreen } from "@/components/auth/auth-screen";
 import { SymbolIcon } from "@/components/dashboard/symbol-icon";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useWebSocket } from "@/hooks/use-websocket";
 import {
   activateAccount,
@@ -20,7 +22,7 @@ import {
 } from "@/lib/auth-storage";
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { Position, AccountInfo } from "@/types";
-import { Bell, Search, ChevronDown, LogOut, Plus, UserRound } from "lucide-react";
+import { Bell, Search, ChevronDown, Loader2, LogOut, Plus, UserRound } from "lucide-react";
 
 interface PriceData {
   symbol: string;
@@ -149,6 +151,10 @@ function AuthenticatedDashboardLayout({
   });
   const [headerPrices, setHeaderPrices] = useState<Record<string, PriceData>>({});
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [createAccountOpen, setCreateAccountOpen] = useState(false);
+  const [newAccountName, setNewAccountName] = useState("");
+  const [isCreatingAccount, setIsCreatingAccount] = useState(false);
+  const [accountError, setAccountError] = useState<string | null>(null);
 
   const activeAccount =
     session.accounts.find((item) => item.id === session.activeAccountId) ?? session.accounts[0];
@@ -204,18 +210,29 @@ function AuthenticatedDashboardLayout({
     setAccountMenuOpen(false);
   };
 
-  const handleCreateAccount = async () => {
-    const name = window.prompt("Account name");
-    if (!name?.trim()) return;
-    const created = await createAccount(name.trim());
-    const activated = await activateAccount(created.account.id);
-    setSession({
-      ...session,
-      accounts: activated.accounts,
-      activeAccountId: activated.active_account_id,
-    });
-    setHeaderPrices({});
-    setAccountMenuOpen(false);
+  const handleCreateAccountSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = newAccountName.trim();
+    if (!name) return;
+
+    setIsCreatingAccount(true);
+    setAccountError(null);
+    try {
+      const created = await createAccount(name);
+      const activated = await activateAccount(created.account.id);
+      setSession({
+        ...session,
+        accounts: activated.accounts,
+        activeAccountId: activated.active_account_id,
+      });
+      setHeaderPrices({});
+      setNewAccountName("");
+      setCreateAccountOpen(false);
+    } catch (err) {
+      setAccountError(err instanceof Error ? err.message : "Could not create account");
+    } finally {
+      setIsCreatingAccount(false);
+    }
   };
 
   const handleLogout = async () => {
@@ -348,7 +365,10 @@ function AuthenticatedDashboardLayout({
                         ))}
                         <div className="border-t border-border-subtle mt-2 pt-2 space-y-1">
                           <button
-                            onClick={handleCreateAccount}
+                            onClick={() => {
+                              setAccountMenuOpen(false);
+                              setCreateAccountOpen(true);
+                            }}
                             className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary rounded-lg transition-colors flex items-center gap-2"
                           >
                             <Plus className="w-4 h-4" />
@@ -392,6 +412,56 @@ function AuthenticatedDashboardLayout({
             )}
             {children}
           </main>
+
+          {createAccountOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+              <form
+                onSubmit={handleCreateAccountSubmit}
+                className="w-full max-w-sm rounded-xl border border-border-subtle bg-bg-elevated p-5 shadow-xl"
+              >
+                <div className="mb-4">
+                  <p className="text-sm font-semibold text-text-primary">New Account</p>
+                  <p className="text-xs text-text-muted mt-1">
+                    Create an isolated broker and Telegram configuration.
+                  </p>
+                </div>
+                <Input
+                  label="Account Name"
+                  value={newAccountName}
+                  onChange={(event) => setNewAccountName(event.target.value)}
+                  placeholder="Broker account"
+                  autoFocus
+                />
+                {accountError && (
+                  <div className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2">
+                    <p className="text-xs text-danger">{accountError}</p>
+                  </div>
+                )}
+                <div className="mt-5 flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() => {
+                      setCreateAccountOpen(false);
+                      setNewAccountName("");
+                      setAccountError(null);
+                    }}
+                    disabled={isCreatingAccount}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="accent"
+                    disabled={isCreatingAccount || !newAccountName.trim()}
+                  >
+                    {isCreatingAccount && <Loader2 className="w-4 h-4 animate-spin" />}
+                    <span>Create</span>
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     </DashboardContext.Provider>
