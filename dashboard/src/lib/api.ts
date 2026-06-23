@@ -1,4 +1,4 @@
-import { API_URL } from "./constants";
+import { REST_API_URL } from "./constants";
 import {
   clearStoredSession,
   getActiveAccountId,
@@ -47,7 +47,7 @@ async function fetchApi<T>(
     headers.set("X-Account-Id", accountId);
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
+  const response = await fetch(`${REST_API_URL}${endpoint}`, {
     ...options,
     headers,
   });
