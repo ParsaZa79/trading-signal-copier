@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
-from ..account_store import ensure_default_account, list_user_accounts
+from ..account_store import get_preferred_account, get_user_setup_status, list_user_accounts
 from ..security import (
     authenticate_credentials,
     create_token,
@@ -16,6 +18,7 @@ from ..security import (
 )
 
 router = APIRouter()
+CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
 
 
 class AuthRequest(BaseModel):
@@ -28,12 +31,14 @@ class AuthResponse(BaseModel):
     token: str
     user: dict
     accounts: list[dict]
-    active_account_id: str
+    active_account_id: str | None
+    setup_complete: bool
 
 
 def _auth_response(user: dict, response: Response) -> AuthResponse:
-    account = ensure_default_account(user)
+    account = get_preferred_account(user)
     accounts = list_user_accounts(user["id"])
+    setup_status = get_user_setup_status(user)
     token = create_token(user["id"])
     response.set_cookie(
         "sc_session",
@@ -48,7 +53,8 @@ def _auth_response(user: dict, response: Response) -> AuthResponse:
         token=token,
         user=sanitize_user(user),
         accounts=accounts,
-        active_account_id=account["id"],
+        active_account_id=account["id"] if account else None,
+        setup_complete=setup_status["setup_complete"],
     )
 
 
@@ -65,7 +71,10 @@ async def bootstrap_status() -> dict:
 @router.post("/setup", response_model=AuthResponse)
 async def setup_admin(request: AuthRequest, response: Response) -> AuthResponse:
     if has_users():
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Setup is already complete")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Setup is already complete",
+        )
     try:
         user = create_user(request.email, request.password)
     except ValueError as e:
@@ -85,13 +94,16 @@ async def login(request: AuthRequest, response: Response) -> AuthResponse:
 
 
 @router.get("/me")
-async def me(current_user: dict = Depends(get_current_user)) -> dict:
-    account = ensure_default_account(current_user)
+async def me(current_user: CurrentUser) -> dict:
+    account = get_preferred_account(current_user)
+    setup_status = get_user_setup_status(current_user)
     return {
         "success": True,
         "user": sanitize_user(current_user),
         "accounts": list_user_accounts(current_user["id"]),
-        "active_account_id": account["id"],
+        "active_account_id": account["id"] if account else None,
+        "setup_complete": setup_status["setup_complete"],
+        "setup": setup_status,
     }
 
 

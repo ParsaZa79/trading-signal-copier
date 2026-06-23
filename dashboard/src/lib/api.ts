@@ -67,13 +67,15 @@ function normalizeAuthSession(response: {
   token: string;
   user: AuthSession["user"];
   accounts: DashboardAccount[];
-  active_account_id: string;
+  active_account_id: string | null;
+  setup_complete?: boolean;
 }): AuthSession {
   return {
     token: response.token,
     user: response.user,
     accounts: response.accounts,
     activeAccountId: response.active_account_id,
+    setupComplete: Boolean(response.setup_complete),
   };
 }
 
@@ -86,7 +88,8 @@ export async function setupAdmin(email: string, password: string): Promise<AuthS
     token: string;
     user: AuthSession["user"];
     accounts: DashboardAccount[];
-    active_account_id: string;
+    active_account_id: string | null;
+    setup_complete?: boolean;
   }>("/api/auth/setup", {
     method: "POST",
     body: JSON.stringify({ email, password }),
@@ -101,7 +104,8 @@ export async function login(email: string, password: string): Promise<AuthSessio
     token: string;
     user: AuthSession["user"];
     accounts: DashboardAccount[];
-    active_account_id: string;
+    active_account_id: string | null;
+    setup_complete?: boolean;
   }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
@@ -115,7 +119,8 @@ export async function getMe(): Promise<AuthSession> {
   const response = await fetchApi<{
     user: AuthSession["user"];
     accounts: DashboardAccount[];
-    active_account_id: string;
+    active_account_id: string | null;
+    setup_complete?: boolean;
   }>("/api/auth/me");
   const existing = await getApiToken();
   if (!existing) {
@@ -126,6 +131,7 @@ export async function getMe(): Promise<AuthSession> {
     user: response.user,
     accounts: response.accounts,
     activeAccountId: response.active_account_id,
+    setupComplete: Boolean(response.setup_complete),
   };
   storeSession(session);
   return session;
@@ -139,7 +145,8 @@ export async function logout(): Promise<void> {
 export async function getAccounts(): Promise<{
   success: boolean;
   accounts: DashboardAccount[];
-  active_account_id: string;
+  active_account_id: string | null;
+  setup_complete: boolean;
 }> {
   return fetchApi("/api/accounts");
 }
@@ -148,6 +155,7 @@ export async function createAccount(name: string): Promise<{
   success: boolean;
   account: DashboardAccount;
   accounts: DashboardAccount[];
+  active_account_id?: string | null;
 }> {
   return fetchApi("/api/accounts", {
     method: "POST",
@@ -158,12 +166,44 @@ export async function createAccount(name: string): Promise<{
 export async function activateAccount(accountId: string): Promise<{
   success: boolean;
   account: DashboardAccount;
-  active_account_id: string;
+  active_account_id: string | null;
   accounts: DashboardAccount[];
 }> {
   return fetchApi(`/api/accounts/${encodeURIComponent(accountId)}/active`, {
     method: "PUT",
   });
+}
+
+export interface AccountSetupStatus {
+  account: DashboardAccount;
+  setup_complete: boolean;
+  broker_configured: boolean;
+  telegram_configured: boolean;
+  missing_fields: string[];
+}
+
+export async function getAccountSetupStatus(): Promise<{
+  success: boolean;
+  setup_complete: boolean;
+  needs_account: boolean;
+  active_account_id: string | null;
+  accounts: DashboardAccount[];
+  account_statuses: AccountSetupStatus[];
+}> {
+  return fetchApi("/api/accounts/setup-status");
+}
+
+export async function completeAccountSetup(): Promise<{
+  success: boolean;
+  account_status: AccountSetupStatus;
+  setup: {
+    setup_complete: boolean;
+    active_account_id: string | null;
+    accounts: DashboardAccount[];
+    account_statuses: AccountSetupStatus[];
+  };
+}> {
+  return fetchApi("/api/accounts/setup-complete", { method: "POST" });
 }
 
 export interface AccessMember {

@@ -90,7 +90,7 @@ export default function OrdersPage() {
       </AnimatedSection>
 
       <AnimatedSection className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <OrderForm onSuccess={reconnect} accountId={session.activeAccountId} />
+        <OrderForm onSuccess={reconnect} accountId={session.activeAccountId ?? undefined} />
 
         <SectionPanel>
           <PanelHeader

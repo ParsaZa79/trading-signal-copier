@@ -117,6 +117,11 @@ export default function BotControlPage() {
 
   // WebSocket connection for log streaming
   useEffect(() => {
+    if (!session.activeAccountId) {
+      setWsConnected(false);
+      return;
+    }
+
     const wsUrl = buildAuthenticatedWsUrl(
       `${API_URL.replace(/^http/, "ws")}/ws/logs`,
       session.token,

@@ -9,7 +9,7 @@ import secrets
 import shutil
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, cast
+from typing import Annotated, Any, cast
 
 from cryptography.fernet import Fernet, InvalidToken
 from fastapi import Depends, HTTPException, status
@@ -40,6 +40,9 @@ from .security import (
 
 ACCOUNTS_PATH = DATA_DIR / "accounts.json"
 MASKED_SECRET = "__configured_secret__"
+SETUP_COMPLETED_KEY = "SETUP_COMPLETED_AT"
+BROKER_SETUP_FIELDS = ("MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER")
+TELEGRAM_SETUP_FIELDS = ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_CHANNEL")
 
 SECRET_FIELD_NAMES = {
     "MT5_PASSWORD",
@@ -206,14 +209,23 @@ def save_account_config(account_id: str, values: dict[str, Any]) -> dict[str, st
     return decode_config(payload, reveal_secrets=True)
 
 
-def _sanitize_account(account: dict[str, Any]) -> dict[str, Any]:
-    return {
+def _is_account_setup_complete(account_id: str) -> bool:
+    values = load_account_config(account_id, reveal_secrets=True)
+    required = (*BROKER_SETUP_FIELDS, *TELEGRAM_SETUP_FIELDS)
+    return bool(values.get(SETUP_COMPLETED_KEY)) and all(values.get(key) for key in required)
+
+
+def _sanitize_account(account: dict[str, Any], *, include_setup: bool = True) -> dict[str, Any]:
+    sanitized = {
         "id": account["id"],
         "name": account.get("name") or "Trading Account",
         "user_id": account["user_id"],
         "created_at": account.get("created_at"),
         "updated_at": account.get("updated_at"),
     }
+    if include_setup:
+        sanitized["setup_complete"] = _is_account_setup_complete(account["id"])
+    return sanitized
 
 
 def list_user_accounts(user_id: str) -> list[dict[str, Any]]:
@@ -232,6 +244,21 @@ def get_account(account_id: str, user_id: str | None = None) -> dict[str, Any] |
     if user_id is not None and account.get("user_id") != user_id:
         return None
     return _sanitize_account(account)
+
+
+def get_preferred_account(user: dict[str, Any]) -> dict[str, Any] | None:
+    accounts = list_user_accounts(user["id"])
+    if not accounts:
+        return None
+
+    active = user.get("active_account_id")
+    if active and (account := get_account(active, user["id"])):
+        return account
+
+    first_complete = next((account for account in accounts if account.get("setup_complete")), None)
+    selected = first_complete or accounts[0]
+    set_active_account_id(user["id"], selected["id"])
+    return selected
 
 
 def _copy_file_if_missing(source: Path, target: Path) -> None:
@@ -275,7 +302,12 @@ def _migrate_legacy_runtime(account_id: str) -> None:
         _copy_file_if_missing(LAST_PRESET_PATH, account_last_preset_path(account_id))
 
 
-def create_account(user_id: str, name: str | None = None, *, migrate_legacy: bool = False) -> dict[str, Any]:
+def create_account(
+    user_id: str,
+    name: str | None = None,
+    *,
+    migrate_legacy: bool = False,
+) -> dict[str, Any]:
     store = _load_accounts_store()
     account_id = secrets.token_urlsafe(10)
     now = _utc_now()
@@ -303,21 +335,69 @@ def create_account(user_id: str, name: str | None = None, *, migrate_legacy: boo
 
 
 def ensure_default_account(user: dict[str, Any]) -> dict[str, Any]:
-    accounts = list_user_accounts(user["id"])
-    if accounts:
-        active = user.get("active_account_id")
-        if active and (account := get_account(active, user["id"])):
-            return account
-        set_active_account_id(user["id"], accounts[0]["id"])
-        return accounts[0]
+    account = get_preferred_account(user)
+    if account:
+        return account
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Account setup required",
+    )
 
-    is_first_account = not bool(_load_accounts_store()["accounts"])
-    return create_account(user["id"], "Primary Account", migrate_legacy=is_first_account)
+
+def account_setup_status(account: dict[str, Any]) -> dict[str, Any]:
+    values = load_account_config(account["id"], reveal_secrets=True)
+    broker_missing = [key for key in BROKER_SETUP_FIELDS if not values.get(key)]
+    telegram_missing = [key for key in TELEGRAM_SETUP_FIELDS if not values.get(key)]
+    missing_fields = [*broker_missing, *telegram_missing]
+    if not values.get(SETUP_COMPLETED_KEY):
+        missing_fields.append(SETUP_COMPLETED_KEY)
+    return {
+        "account": _sanitize_account(account),
+        "setup_complete": not missing_fields,
+        "broker_configured": not broker_missing,
+        "telegram_configured": not telegram_missing,
+        "missing_fields": missing_fields,
+    }
+
+
+def get_user_setup_status(user: dict[str, Any]) -> dict[str, Any]:
+    accounts = list_user_accounts(user["id"])
+    active = get_preferred_account(user)
+    account_statuses = [account_setup_status(account) for account in accounts]
+    active_status = (
+        next(
+            (item for item in account_statuses if item["account"]["id"] == active["id"]),
+            None,
+        )
+        if active
+        else None
+    )
+    return {
+        "setup_complete": bool(active_status and active_status["setup_complete"]),
+        "needs_account": not accounts,
+        "active_account_id": active["id"] if active else None,
+        "accounts": accounts,
+        "account_statuses": account_statuses,
+    }
+
+
+def mark_account_setup_complete(account_id: str) -> dict[str, Any]:
+    account = get_account(account_id)
+    if not account:
+        raise ValueError("Account not found")
+
+    values = load_account_config(account_id, reveal_secrets=True)
+    missing = [key for key in (*BROKER_SETUP_FIELDS, *TELEGRAM_SETUP_FIELDS) if not values.get(key)]
+    if missing:
+        raise ValueError(f"Missing setup fields: {', '.join(missing)}")
+
+    save_account_config(account_id, {SETUP_COMPLETED_KEY: _utc_now()})
+    return account_setup_status(account)
 
 
 async def get_active_account(
-    current_user: dict[str, Any] = Depends(get_current_user),
-    requested_account_id: str | None = Depends(get_requested_account_id),
+    current_user: Annotated[dict[str, Any], Depends(get_current_user)],
+    requested_account_id: Annotated[str | None, Depends(get_requested_account_id)],
 ) -> dict[str, Any]:
     if requested_account_id:
         account = get_account(requested_account_id, current_user["id"])
@@ -333,7 +413,7 @@ async def get_active_account(
 def get_websocket_account(user: dict[str, Any], account_id: str | None) -> dict[str, Any] | None:
     if account_id:
         return get_account(account_id, user["id"])
-    return ensure_default_account(user)
+    return get_preferred_account(user)
 
 
 def set_user_active_account(user_id: str, account_id: str) -> dict[str, Any]:

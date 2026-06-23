@@ -37,7 +37,7 @@ def test_account_config_encrypts_and_masks_secrets(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
 
     user = security.create_user("owner@example.com", "correct horse battery")
-    account = account_store.ensure_default_account(user)
+    account = account_store.create_account(user["id"], "Primary Account")
 
     account_store.save_account_config(
         account["id"],
@@ -65,7 +65,7 @@ def test_blank_secret_save_preserves_existing_value(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
 
     user = security.create_user("owner@example.com", "correct horse battery")
-    account = account_store.ensure_default_account(user)
+    account = account_store.create_account(user["id"], "Primary Account")
     account_store.save_account_config(account["id"], {"MT5_PASSWORD": "first-password"})
     account_store.save_account_config(
         account["id"],
@@ -81,7 +81,7 @@ def test_accounts_are_isolated(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
 
     user = security.create_user("owner@example.com", "correct horse battery")
-    first = account_store.ensure_default_account(user)
+    first = account_store.create_account(user["id"], "Primary Account")
     second = account_store.create_account(user["id"], "Second")
 
     account_store.save_account_config(first["id"], {"MT5_LOGIN": "111", "MT5_PASSWORD": "one"})
@@ -101,7 +101,7 @@ def test_clerk_owner_bootstrap_migrates_legacy_accounts(monkeypatch, tmp_path):
     monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
 
     legacy_user = security.create_user("owner@example.com", "correct horse battery")
-    legacy_account = account_store.ensure_default_account(legacy_user)
+    legacy_account = account_store.create_account(legacy_user["id"], "Primary Account")
 
     member = access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
 
@@ -111,6 +111,51 @@ def test_clerk_owner_bootstrap_migrates_legacy_accounts(monkeypatch, tmp_path):
     assert member["active_account_id"] == legacy_account["id"]
     assert account_store.get_account(legacy_account["id"], "user_clerk_owner") is not None
     assert account_store.get_account(legacy_account["id"], legacy_user["id"]) is None
+
+
+def test_accounts_are_not_created_until_requested(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+
+    user = security.create_user("owner@example.com", "correct horse battery")
+
+    assert account_store.list_user_accounts(user["id"]) == []
+    assert account_store.get_preferred_account(user) is None
+    assert account_store.get_user_setup_status(user)["needs_account"] is True
+
+    with pytest.raises(HTTPException) as exc_info:
+        account_store.ensure_default_account(user)
+
+    assert exc_info.value.status_code == 404
+
+
+def test_account_setup_requires_broker_telegram_and_completion_marker(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+
+    user = security.create_user("owner@example.com", "correct horse battery")
+    account = account_store.create_account(user["id"], "Live Account")
+
+    account_store.save_account_config(
+        account["id"],
+        {
+            "MT5_LOGIN": "123456",
+            "MT5_PASSWORD": "broker-password",
+            "MT5_SERVER": "Broker-Real",
+            "TELEGRAM_API_ID": "123456",
+            "TELEGRAM_API_HASH": "telegram-hash",
+            "TELEGRAM_CHANNEL": "signals",
+        },
+    )
+
+    setup = account_store.get_user_setup_status(user)
+    assert setup["setup_complete"] is False
+    assert account_store.list_user_accounts(user["id"])[0]["setup_complete"] is False
+
+    completed = account_store.mark_account_setup_complete(account["id"])
+    refreshed = account_store.get_user_setup_status(user)
+
+    assert completed["setup_complete"] is True
+    assert refreshed["setup_complete"] is True
+    assert account_store.list_user_accounts(user["id"])[0]["setup_complete"] is True
 
 
 def test_invited_clerk_user_links_pending_access(monkeypatch, tmp_path):

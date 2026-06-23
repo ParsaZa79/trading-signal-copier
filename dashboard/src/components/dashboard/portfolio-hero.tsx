@@ -15,7 +15,7 @@ import { EquityChart, buildEquityCurve } from "./equity-chart";
 interface PortfolioHeroProps {
   account: AccountInfo | null;
   floatingPnL: number;
-  accountId: string;
+  accountId: string | null;
 }
 
 export function PortfolioHero({ account, floatingPnL, accountId }: PortfolioHeroProps) {

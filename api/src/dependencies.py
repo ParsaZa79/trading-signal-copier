@@ -1,7 +1,8 @@
 """FastAPI dependencies for dependency injection."""
 
+import os
 from collections.abc import Callable
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException
 
@@ -28,6 +29,14 @@ def _coerce_int(value: str | None, default: int) -> int:
         return default
 
 
+def _mt5_docker_host(config_values: dict[str, str]) -> str | None:
+    return config_values.get("MT5_DOCKER_HOST") or os.getenv("MT5_DOCKER_HOST") or None
+
+
+def _mt5_docker_port(config_values: dict[str, str]) -> int:
+    return _coerce_int(config_values.get("MT5_DOCKER_PORT") or os.getenv("MT5_DOCKER_PORT"), 8001)
+
+
 def _new_executor(account_id: str) -> Any:
     if _executor_factory is None:
         raise RuntimeError("MT5 executor factory not initialized")
@@ -37,8 +46,8 @@ def _new_executor(account_id: str) -> Any:
         login=_coerce_int(config.get("MT5_LOGIN"), 0),
         password=config.get("MT5_PASSWORD", ""),
         server=config.get("MT5_SERVER", ""),
-        docker_host=config.get("MT5_DOCKER_HOST") or None,
-        docker_port=_coerce_int(config.get("MT5_DOCKER_PORT"), 8001),
+        docker_host=_mt5_docker_host(config),
+        docker_port=_mt5_docker_port(config),
         path=config.get("MT5_PATH") or None,
     )
 
@@ -67,7 +76,9 @@ def is_account_runtime_active(account_id: str, executor: Any | None = None) -> b
     )
 
 
-def get_mt5_executor(account: dict = Depends(get_active_account)) -> Any:
+def get_mt5_executor(
+    account: Annotated[dict[str, Any], Depends(get_active_account)],
+) -> Any:
     """Get the active account's MT5 executor."""
     executor = get_executor_for_account_id(account["id"])
     if not is_account_runtime_active(account["id"], executor):
@@ -86,8 +97,8 @@ def connect_account_executor(account_id: str, config_values: dict[str, str]) -> 
         login=_coerce_int(config_values.get("MT5_LOGIN"), 0),
         password=config_values.get("MT5_PASSWORD", ""),
         server=config_values.get("MT5_SERVER", ""),
-        docker_host=config_values.get("MT5_DOCKER_HOST") or None,
-        docker_port=_coerce_int(config_values.get("MT5_DOCKER_PORT"), 8001),
+        docker_host=_mt5_docker_host(config_values),
+        docker_port=_mt5_docker_port(config_values),
         path=config_values.get("MT5_PATH") or None,
     )
 

@@ -24,7 +24,7 @@ import {
 } from "@/lib/auth-storage";
 import { setClerkTokenProvider } from "@/lib/clerk-token";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { Position, AccountInfo } from "@/types";
 import { Bell, Search, ChevronDown, Loader2, LogOut, Plus, UserRound } from "lucide-react";
@@ -289,8 +289,12 @@ function AuthenticatedDashboardLayout({
   setSession: (session: AuthSession) => void;
   onLogout?: () => Promise<void> | void;
 }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const isSetupRoute = pathname.startsWith("/setup");
+  const needsSetup = !session.setupComplete;
   const { positions, account, isConnected, error, reconnect } = useWebSocket({
-    enabled: true,
+    enabled: session.setupComplete && Boolean(session.activeAccountId),
     token: session.token,
     accountId: session.activeAccountId,
   });
@@ -301,9 +305,22 @@ function AuthenticatedDashboardLayout({
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [accountError, setAccountError] = useState<string | null>(null);
 
+  const completedAccounts = session.accounts.filter((item) => item.setup_complete);
   const activeAccount =
-    session.accounts.find((item) => item.id === session.activeAccountId) ?? session.accounts[0];
+    completedAccounts.find((item) => item.id === session.activeAccountId) ??
+    session.accounts.find((item) => item.id === session.activeAccountId) ??
+    completedAccounts[0] ??
+    session.accounts[0];
+  const visibleActiveAccount = needsSetup ? null : activeAccount;
   const mt5Connected = isConnected && account !== null;
+
+  useEffect(() => {
+    if (needsSetup && !isSetupRoute) {
+      router.replace("/setup");
+    } else if (!needsSetup && isSetupRoute) {
+      router.replace("/");
+    }
+  }, [isSetupRoute, needsSetup, router]);
 
   const fetchHeaderPrices = useCallback(async () => {
     if (!account) {
@@ -375,6 +392,7 @@ function AuthenticatedDashboardLayout({
         ...session,
         accounts: activated.accounts,
         activeAccountId: activated.active_account_id,
+        setupComplete: false,
       });
       setHeaderPrices({});
       setNewAccountName("");
@@ -395,6 +413,14 @@ function AuthenticatedDashboardLayout({
     window.location.reload();
   };
 
+  if (needsSetup && !isSetupRoute) {
+    return (
+      <main className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <p className="text-sm text-text-muted">Opening account setup...</p>
+      </main>
+    );
+  }
+
   return (
     <DashboardContext.Provider
       value={{ positions, account, isConnected: mt5Connected, error, reconnect, session, setSession }}
@@ -407,10 +433,12 @@ function AuthenticatedDashboardLayout({
             <div className="h-full px-4 lg:px-6 flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-text-primary truncate">
-                  {activeAccount?.name || "Portfolio"}
+                  {visibleActiveAccount?.name || (needsSetup ? "Account Setup" : "Portfolio")}
                 </p>
                 <p className="text-[11px] text-text-muted truncate hidden sm:block">
-                  {mt5Connected
+                  {needsSetup
+                    ? "Account setup required"
+                    : mt5Connected
                     ? "Markets active · Live MT5 feed"
                     : "Waiting for MT5 connection"}
                 </p>
@@ -430,7 +458,7 @@ function AuthenticatedDashboardLayout({
 
               <div className="flex items-center gap-4">
                 <div className="hidden lg:flex items-center gap-3">
-                  {HEADER_SYMBOLS.map((sym) => {
+                  {!needsSetup && HEADER_SYMBOLS.map((sym) => {
                     const price = headerPrices[sym.base];
 
                     if (!price) {
@@ -487,7 +515,7 @@ function AuthenticatedDashboardLayout({
                     </div>
                     <div className="text-left hidden lg:block max-w-36">
                       <p className="text-xs font-medium text-text-primary truncate">
-                        {activeAccount?.name || session.user.email}
+                        {visibleActiveAccount?.name || session.user.email}
                       </p>
                     </div>
                     <ChevronDown className="w-3.5 h-3.5 text-text-muted hidden lg:block" />
@@ -505,7 +533,12 @@ function AuthenticatedDashboardLayout({
                             {session.user.email}
                           </p>
                         </div>
-                        {session.accounts.map((item) => (
+                        {completedAccounts.length === 0 && (
+                          <div className="px-3 py-2 text-xs text-text-muted">
+                            No configured accounts yet.
+                          </div>
+                        )}
+                        {completedAccounts.map((item) => (
                           <button
                             key={item.id}
                             onClick={() => handleSwitchAccount(item.id)}
@@ -519,16 +552,18 @@ function AuthenticatedDashboardLayout({
                           </button>
                         ))}
                         <div className="border-t border-border-subtle mt-2 pt-2 space-y-1">
-                          <button
-                            onClick={() => {
-                              setAccountMenuOpen(false);
-                              setCreateAccountOpen(true);
-                            }}
-                            className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary rounded-lg transition-colors flex items-center gap-2"
-                          >
-                            <Plus className="w-4 h-4" />
-                            New account
-                          </button>
+                          {session.setupComplete && (
+                            <button
+                              onClick={() => {
+                                setAccountMenuOpen(false);
+                                setCreateAccountOpen(true);
+                              }}
+                              className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary rounded-lg transition-colors flex items-center gap-2"
+                            >
+                              <Plus className="w-4 h-4" />
+                              New account
+                            </button>
+                          )}
                           <button
                             onClick={handleLogout}
                             className="w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger/10 rounded-lg transition-colors flex items-center gap-2"

@@ -38,7 +38,7 @@ executor_module = _load_module_directly(
 )
 MT5Executor = executor_module.MT5Executor
 
-from .account_store import ensure_default_account, get_websocket_account
+from .account_store import get_websocket_account
 from .config import config
 from .dependencies import (
     clear_mt5_executor,
@@ -89,9 +89,7 @@ async def lifespan(app: FastAPI):
     await init_database()
 
     set_mt5_executor_factory(MT5Executor)
-    admin = bootstrap_admin_from_env()
-    if admin:
-        ensure_default_account(admin)
+    bootstrap_admin_from_env()
 
     # Start account-aware WebSocket broadcaster.
     _broadcaster_task = asyncio.create_task(

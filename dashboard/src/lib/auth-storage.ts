@@ -12,6 +12,7 @@ export interface DashboardAccount {
   id: string;
   name: string;
   user_id: string;
+  setup_complete?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -20,7 +21,8 @@ export interface AuthSession {
   token: string;
   user: DashboardUser;
   accounts: DashboardAccount[];
-  activeAccountId: string;
+  activeAccountId: string | null;
+  setupComplete: boolean;
 }
 
 const STORAGE_KEY = "signal_copier_auth";
@@ -35,8 +37,12 @@ export function getStoredSession(): AuthSession | null {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as AuthSession;
-    if (!parsed.token || !parsed.activeAccountId) return null;
-    return parsed;
+    if (!parsed.token) return null;
+    return {
+      ...parsed,
+      activeAccountId: parsed.activeAccountId ?? null,
+      setupComplete: Boolean(parsed.setupComplete),
+    };
   } catch {
     return null;
   }

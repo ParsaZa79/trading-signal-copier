@@ -16,7 +16,7 @@ interface UseWebSocketReturn {
 interface UseWebSocketOptions {
   enabled: boolean;
   token: string;
-  accountId: string;
+  accountId: string | null;
 }
 
 export function useWebSocket({

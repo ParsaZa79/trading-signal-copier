@@ -2,18 +2,22 @@
 
 from __future__ import annotations
 
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from ..account_store import (
     create_account,
-    ensure_default_account,
+    get_user_setup_status,
     list_user_accounts,
+    mark_account_setup_complete,
     set_user_active_account,
 )
 from ..security import get_current_user
 
 router = APIRouter()
+CurrentUser = Annotated[dict[str, Any], Depends(get_current_user)]
 
 
 class CreateAccountRequest(BaseModel):
@@ -22,12 +26,13 @@ class CreateAccountRequest(BaseModel):
 
 @router.get("")
 @router.get("/")
-async def list_accounts(current_user: dict = Depends(get_current_user)) -> dict:
-    active = ensure_default_account(current_user)
+async def list_accounts(current_user: CurrentUser) -> dict:
+    setup = get_user_setup_status(current_user)
     return {
         "success": True,
         "accounts": list_user_accounts(current_user["id"]),
-        "active_account_id": active["id"],
+        "active_account_id": setup["active_account_id"],
+        "setup_complete": setup["setup_complete"],
     }
 
 
@@ -35,20 +40,47 @@ async def list_accounts(current_user: dict = Depends(get_current_user)) -> dict:
 @router.post("/")
 async def add_account(
     request: CreateAccountRequest,
-    current_user: dict = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> dict:
     account = create_account(current_user["id"], request.name)
+    accounts = list_user_accounts(current_user["id"])
     return {
         "success": True,
         "account": account,
-        "accounts": list_user_accounts(current_user["id"]),
+        "accounts": accounts,
+        "active_account_id": account["id"] if len(accounts) == 1 else None,
+    }
+
+
+@router.get("/setup-status")
+async def setup_status(current_user: CurrentUser) -> dict:
+    return {
+        "success": True,
+        **get_user_setup_status(current_user),
+    }
+
+
+@router.post("/setup-complete")
+async def complete_account_setup(current_user: CurrentUser) -> dict:
+    setup = get_user_setup_status(current_user)
+    account_id = setup["active_account_id"]
+    if not account_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account setup required")
+    try:
+        account_status = mark_account_setup_complete(account_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+    return {
+        "success": True,
+        "account_status": account_status,
+        "setup": get_user_setup_status(current_user),
     }
 
 
 @router.put("/{account_id}/active")
 async def set_active_account(
     account_id: str,
-    current_user: dict = Depends(get_current_user),
+    current_user: CurrentUser,
 ) -> dict:
     try:
         account = set_user_active_account(current_user["id"], account_id)
