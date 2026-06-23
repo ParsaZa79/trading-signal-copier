@@ -79,6 +79,16 @@ def _bootstrap_emails() -> set[str]:
     return {_clean_email(item) for item in raw.split(",") if item.strip()}
 
 
+def _self_signup_enabled() -> bool:
+    raw = os.getenv("ACCESS_REQUIRE_INVITE", "").strip().lower()
+    return raw not in {"1", "true", "yes", "on"}
+
+
+def _default_self_signup_role() -> str:
+    role = os.getenv("ACCESS_SELF_SIGNUP_ROLE", "trader").strip().lower()
+    return role if role in ACCESS_ROLES - {"owner"} else "trader"
+
+
 def _legacy_user_for_email(email: str) -> dict[str, Any] | None:
     store = _read_json(LEGACY_USERS_PATH, {"users": {}})
     for user in store.get("users", {}).values():
@@ -217,16 +227,18 @@ def resolve_clerk_member(clerk_user_id: str, email: str | None = None) -> dict[s
         _save_store(store)
         return _sanitize_member(invited)
 
-    if store["members"]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
+    if invited is not None:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
 
     allowed_bootstrap = _bootstrap_emails()
     legacy_user = _legacy_user_for_email(clean_email)
-    if allowed_bootstrap and clean_email not in allowed_bootstrap:
+    has_active_owner = _owner_count(store) > 0
+    if not has_active_owner and allowed_bootstrap and clean_email not in allowed_bootstrap:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
-    if not allowed_bootstrap and legacy_user is None:
-        # Empty deployments still need a recovery path, but existing deployments
-        # should bootstrap only from the old admin email or ACCESS_BOOTSTRAP_EMAILS.
+    if has_active_owner and not _self_signup_enabled():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
+
+    if legacy_user is None:
         legacy_active_account_id = None
     else:
         legacy_active_account_id = (
@@ -235,12 +247,13 @@ def resolve_clerk_member(clerk_user_id: str, email: str | None = None) -> dict[s
             else None
         )
 
+    role = "owner" if not has_active_owner else _default_self_signup_role()
     member = _create_member(
         store,
         member_id=clerk_user_id,
         clerk_user_id=clerk_user_id,
         email=clean_email,
-        role="owner",
+        role=role,
         status_value="active",
         active_account_id=legacy_active_account_id,
     )

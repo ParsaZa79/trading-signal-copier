@@ -175,14 +175,22 @@ function ClerkDashboardLayout({ children }: DashboardLayoutProps) {
       return;
     }
 
-    setClerkTokenProvider(() => getToken());
-
     let cancelled = false;
+    let latestToken: string | null = null;
+    const resolveToken = async () => {
+      const freshToken = await getToken();
+      if (freshToken) {
+        latestToken = freshToken;
+      }
+      return latestToken;
+    };
+    setClerkTokenProvider(resolveToken);
+
     async function loadSession() {
       setIsLoading(true);
       setAccessError(null);
       try {
-        const token = await getToken();
+        const token = await resolveToken();
         if (!token) throw new Error("Authentication required");
         const refreshed = await getMe();
         if (!cancelled) {

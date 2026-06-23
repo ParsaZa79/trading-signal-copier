@@ -126,6 +126,33 @@ def test_clerk_owner_bootstrap_migrates_legacy_accounts(monkeypatch, tmp_path):
     assert account_store.get_account(legacy_account["id"], legacy_user["id"]) is None
 
 
+def test_uninvited_clerk_users_are_self_service_traders(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
+
+    owner = access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+    trader = access_store.resolve_clerk_member("user_clerk_trader", "trader@example.com")
+
+    assert owner["role"] == "owner"
+    assert trader["role"] == "trader"
+    assert trader["status"] == "active"
+    assert trader["active_account_id"] is None
+
+
+def test_invite_only_mode_blocks_uninvited_clerk_users(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
+    monkeypatch.setenv("ACCESS_REQUIRE_INVITE", "true")
+
+    access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+
+    with pytest.raises(HTTPException) as exc_info:
+        access_store.resolve_clerk_member("user_clerk_trader", "trader@example.com")
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Access not granted"
+
+
 def test_accounts_are_not_created_until_requested(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
 
@@ -216,6 +243,25 @@ def test_invited_clerk_user_links_pending_access(monkeypatch, tmp_path):
     assert member["status"] == "active"
     assert member["invitation_status"] == "accepted"
     assert len(members) == 1
+
+
+def test_disabled_clerk_member_stays_blocked(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
+
+    access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+    pending = access_store.invite_member(
+        email="disabled@example.com",
+        role="trader",
+        invited_by="user_clerk_owner",
+    )
+    access_store.update_member(pending["id"], status_value="disabled")
+
+    with pytest.raises(HTTPException) as exc_info:
+        access_store.resolve_clerk_member("user_clerk_disabled", "disabled@example.com")
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == "Access disabled"
 
 
 def test_access_store_keeps_at_least_one_active_owner(monkeypatch, tmp_path):
