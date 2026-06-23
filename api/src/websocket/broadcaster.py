@@ -1,24 +1,22 @@
 """Background broadcaster for real-time updates."""
 
 import asyncio
+from collections.abc import Callable
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Any
 
 from .manager import ConnectionManager
 
-if TYPE_CHECKING:
-    from tania_signal_copier.executor import MT5Executor
-
 
 async def start_broadcaster(
-    executor: "MT5Executor",
+    get_executor: Callable[[str], Any],
     manager: ConnectionManager,
     interval: float = 1.0,
 ) -> None:
     """Background task that broadcasts position and account updates.
 
     Args:
-        executor: The MT5 executor instance.
+        get_executor: Resolver for the subscribed account's MT5 executor.
         manager: The WebSocket connection manager.
         interval: Broadcast interval in seconds.
     """
@@ -31,11 +29,10 @@ async def start_broadcaster(
                 await asyncio.sleep(interval)
                 continue
 
-            # Build update message
-            message = await _build_update_message(executor)
-
-            # Broadcast to all clients
-            await manager.broadcast(message)
+            for account_id in manager.account_ids:
+                executor = get_executor(account_id)
+                message = await _build_update_message(executor, account_id)
+                await manager.broadcast(account_id, message)
 
         except asyncio.CancelledError:
             print("Broadcaster task cancelled")
@@ -46,7 +43,7 @@ async def start_broadcaster(
         await asyncio.sleep(interval)
 
 
-async def _build_update_message(executor: "MT5Executor") -> dict:
+async def _build_update_message(executor: Any, account_id: str) -> dict:
     """Build the update message with positions and account info.
 
     Args:
@@ -96,6 +93,7 @@ async def _build_update_message(executor: "MT5Executor") -> dict:
 
     return {
         "type": "update",
+        "account_id": account_id,
         "timestamp": datetime.now().isoformat(),
         "positions": positions_data,
         "account": account_data,

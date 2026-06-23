@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import { WS_URL } from "@/lib/constants";
+import { buildAuthenticatedWsUrl } from "@/lib/auth-storage";
 import type { Position, AccountInfo, WebSocketMessage } from "@/types";
 
 interface UseWebSocketReturn {
@@ -12,7 +13,17 @@ interface UseWebSocketReturn {
   reconnect: () => void;
 }
 
-export function useWebSocket(): UseWebSocketReturn {
+interface UseWebSocketOptions {
+  enabled: boolean;
+  token: string;
+  accountId: string;
+}
+
+export function useWebSocket({
+  enabled,
+  token,
+  accountId,
+}: UseWebSocketOptions): UseWebSocketReturn {
   const [positions, setPositions] = useState<Position[]>([]);
   const [account, setAccount] = useState<AccountInfo | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -25,13 +36,17 @@ export function useWebSocket(): UseWebSocketReturn {
   const connectRef = useRef<() => void>(() => {});
 
   const connect = useCallback(() => {
+    if (!enabled || !token || !accountId) {
+      return;
+    }
+
     // Clean up existing connection
     if (wsRef.current) {
       wsRef.current.close();
     }
 
     try {
-      const ws = new WebSocket(WS_URL);
+      const ws = new WebSocket(buildAuthenticatedWsUrl(WS_URL, token, accountId));
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -44,6 +59,9 @@ export function useWebSocket(): UseWebSocketReturn {
       ws.onmessage = (event) => {
         try {
           const data: WebSocketMessage = JSON.parse(event.data);
+          if (data.account_id && data.account_id !== accountId) {
+            return;
+          }
 
           if (data.type === "update") {
             if (data.positions) {
@@ -88,7 +106,7 @@ export function useWebSocket(): UseWebSocketReturn {
       setError("Failed to create WebSocket connection");
       console.error("WebSocket creation error:", e);
     }
-  }, []);
+  }, [accountId, enabled, token]);
 
   // Keep connectRef in sync with the latest connect function
   useEffect(() => {
@@ -101,6 +119,10 @@ export function useWebSocket(): UseWebSocketReturn {
   }, [connect]);
 
   useEffect(() => {
+    if (!enabled || !token || !accountId) {
+      return;
+    }
+
     // Initial connection setup - necessary to establish WebSocket on mount
     // eslint-disable-next-line react-hooks/set-state-in-effect
     connect();
@@ -113,7 +135,7 @@ export function useWebSocket(): UseWebSocketReturn {
         wsRef.current.close();
       }
     };
-  }, [connect]);
+  }, [accountId, connect, enabled, token]);
 
   return { positions, account, isConnected, error, reconnect };
 }

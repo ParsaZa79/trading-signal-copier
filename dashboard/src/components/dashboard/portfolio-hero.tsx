@@ -15,9 +15,10 @@ import { EquityChart, buildEquityCurve } from "./equity-chart";
 interface PortfolioHeroProps {
   account: AccountInfo | null;
   floatingPnL: number;
+  accountId: string;
 }
 
-export function PortfolioHero({ account, floatingPnL }: PortfolioHeroProps) {
+export function PortfolioHero({ account, floatingPnL, accountId }: PortfolioHeroProps) {
   const [range, setRange] = useState<TimeRange>("1M");
   const [periodPnL, setPeriodPnL] = useState(0);
   const [tradeCount, setTradeCount] = useState(0);
@@ -58,7 +59,7 @@ export function PortfolioHero({ account, floatingPnL }: PortfolioHeroProps) {
     return () => {
       cancelled = true;
     };
-  }, [range, equity, balance]);
+  }, [range, equity, balance, accountId]);
 
   const changePercent = useMemo(() => {
     const base = balance > 0 ? balance : equity;

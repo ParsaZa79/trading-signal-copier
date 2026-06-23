@@ -8,17 +8,17 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from ..account_store import get_active_account
+from ..runtime_data import account_analysis_dir, account_analysis_outcomes_path, account_telegram_session_name
 from .bot import _load_env_for_bot
 
 router = APIRouter()
 
 # Paths
 BOT_DIR = Path(__file__).parent.parent.parent.parent / "bot"
-ANALYSIS_DIR = BOT_DIR / "analysis"
-OUTCOMES_PATH = ANALYSIS_DIR / "signals_outcomes.json"
 SCRIPTS_DIR = BOT_DIR / "scripts"
 
 
@@ -32,9 +32,10 @@ class RunAnalysisRequest(BaseModel):
 
 
 @router.get("/summary")
-async def get_analysis_summary():
+async def get_analysis_summary(account: dict = Depends(get_active_account)):
     """Get analysis summary from signals_outcomes.json."""
-    if not OUTCOMES_PATH.exists():
+    outcomes_path = account_analysis_outcomes_path(account["id"])
+    if not outcomes_path.exists():
         return {
             "success": True,
             "summary": {
@@ -50,7 +51,7 @@ async def get_analysis_summary():
         }
 
     try:
-        data = json.loads(OUTCOMES_PATH.read_text(encoding="utf-8"))
+        data = json.loads(outcomes_path.read_text(encoding="utf-8"))
         signals = data.get("signals", [])
 
         if len(signals) == 0:
@@ -153,7 +154,7 @@ async def get_analysis_summary():
 
 
 @router.post("/run")
-async def run_analysis(request: RunAnalysisRequest):
+async def run_analysis(request: RunAnalysisRequest, account: dict = Depends(get_active_account)):
     """Run analysis scripts (fetch signals or generate report).
 
     Uses asyncio.create_subprocess_exec for safe command execution
@@ -189,13 +190,15 @@ async def run_analysis(request: RunAnalysisRequest):
 
     try:
         # Load bot config (Telegram credentials etc.) from dashboard cache
-        bot_env = await _load_env_for_bot()
+        bot_env = await _load_env_for_bot(account["id"])
 
         # Build safe env: strip VIRTUAL_ENV so uv resolves the bot's own venv,
         # then overlay the dashboard-stored bot config variables.
         script_env = {k: v for k, v in os.environ.items() if k != "VIRTUAL_ENV"}
         script_env.update(bot_env)
         script_env["PYTHONUNBUFFERED"] = "1"
+        script_env["SIGNAL_ANALYSIS_DIR"] = str(account_analysis_dir(account["id"]))
+        script_env["TELEGRAM_SESSION_NAME"] = str(account_telegram_session_name(account["id"]))
 
         # Run the script using subprocess_exec (safe, no shell)
         proc = await asyncio.create_subprocess_exec(

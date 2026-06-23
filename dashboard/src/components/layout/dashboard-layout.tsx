@@ -1,12 +1,26 @@
 "use client";
 
 import { Sidebar } from "./sidebar";
+import { AuthScreen } from "@/components/auth/auth-screen";
+import { SymbolIcon } from "@/components/dashboard/symbol-icon";
 import { useWebSocket } from "@/hooks/use-websocket";
+import {
+  activateAccount,
+  createAccount,
+  getBootstrapStatus,
+  getMe,
+  getSymbolPrice,
+  logout,
+} from "@/lib/api";
+import {
+  clearStoredSession,
+  getStoredSession,
+  storeSession,
+  type AuthSession,
+} from "@/lib/auth-storage";
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import type { Position, AccountInfo } from "@/types";
-import { Bell, Search, ChevronDown } from "lucide-react";
-import { getSymbolPrice } from "@/lib/api";
-import { SymbolIcon } from "@/components/dashboard/symbol-icon";
+import { Bell, Search, ChevronDown, LogOut, Plus, UserRound } from "lucide-react";
 
 interface PriceData {
   symbol: string;
@@ -16,13 +30,14 @@ interface PriceData {
   prevBid?: number;
 }
 
-// Context for sharing WebSocket data across pages
 interface DashboardContextType {
   positions: Position[];
   account: AccountInfo | null;
   isConnected: boolean;
   error: string | null;
   reconnect: () => void;
+  session: AuthSession;
+  setSession: (session: AuthSession) => void;
 }
 
 const DashboardContext = createContext<DashboardContextType | null>(null);
@@ -39,7 +54,6 @@ interface DashboardLayoutProps {
   children: ReactNode;
 }
 
-// Symbols to show in header - the API will resolve the actual broker name
 const HEADER_SYMBOLS = [
   { base: "XAUUSD", label: "XAU/USD" },
   { base: "EURUSD", label: "EUR/USD" },
@@ -47,15 +61,103 @@ const HEADER_SYMBOLS = [
 ];
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const { positions, account, isConnected, error, reconnect } = useWebSocket();
+  const [session, setSessionState] = useState<AuthSession | null>(null);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+
+  const setSession = useCallback((nextSession: AuthSession) => {
+    storeSession(nextSession);
+    setSessionState(nextSession);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function bootstrap() {
+      const stored = getStoredSession();
+      if (stored) {
+        setSessionState(stored);
+        try {
+          const refreshed = await getMe();
+          if (!cancelled) {
+            setSessionState(refreshed);
+          }
+        } catch {
+          clearStoredSession();
+          if (!cancelled) setSessionState(null);
+        }
+      }
+
+      try {
+        const status = await getBootstrapStatus();
+        if (!cancelled) {
+          setSetupRequired(status.setup_required);
+        }
+      } catch {
+        if (!cancelled) setSetupRequired(false);
+      } finally {
+        if (!cancelled) setIsLoadingAuth(false);
+      }
+    }
+
+    bootstrap();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (isLoadingAuth) {
+    return (
+      <main className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <p className="text-sm text-text-muted">Loading dashboard...</p>
+      </main>
+    );
+  }
+
+  if (!session) {
+    return (
+      <AuthScreen
+        setupRequired={setupRequired}
+        onAuthenticated={(nextSession) => {
+          setSetupRequired(false);
+          setSession(nextSession);
+        }}
+      />
+    );
+  }
+
+  return (
+    <AuthenticatedDashboardLayout session={session} setSession={setSession}>
+      {children}
+    </AuthenticatedDashboardLayout>
+  );
+}
+
+function AuthenticatedDashboardLayout({
+  children,
+  session,
+  setSession,
+}: {
+  children: ReactNode;
+  session: AuthSession;
+  setSession: (session: AuthSession) => void;
+}) {
+  const { positions, account, isConnected, error, reconnect } = useWebSocket({
+    enabled: true,
+    token: session.token,
+    accountId: session.activeAccountId,
+  });
   const [headerPrices, setHeaderPrices] = useState<Record<string, PriceData>>({});
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+
+  const activeAccount =
+    session.accounts.find((item) => item.id === session.activeAccountId) ?? session.accounts[0];
 
   const fetchHeaderPrices = useCallback(async () => {
     try {
       const results = await Promise.all(
         HEADER_SYMBOLS.map(async (sym) => {
           try {
-            // The API's get_symbol_info handles finding the actual broker symbol
             const price = await getSymbolPrice(sym.base);
             return { base: sym.base, data: price };
           } catch {
@@ -76,35 +178,64 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         });
         return newPrices;
       });
-    } catch (error) {
-      console.error("Failed to fetch header prices:", error);
+    } catch (err) {
+      console.error("Failed to fetch header prices:", err);
     }
   }, []);
 
   useEffect(() => {
-    // Use setTimeout to avoid synchronous setState in effect
     const initialFetch = setTimeout(fetchHeaderPrices, 0);
     const interval = setInterval(fetchHeaderPrices, 2000);
     return () => {
       clearTimeout(initialFetch);
       clearInterval(interval);
     };
-  }, [fetchHeaderPrices]);
+  }, [fetchHeaderPrices, session.activeAccountId]);
+
+  const handleSwitchAccount = async (accountId: string) => {
+    const result = await activateAccount(accountId);
+    const nextSession = {
+      ...session,
+      accounts: result.accounts,
+      activeAccountId: result.active_account_id,
+    };
+    setHeaderPrices({});
+    setSession(nextSession);
+    setAccountMenuOpen(false);
+  };
+
+  const handleCreateAccount = async () => {
+    const name = window.prompt("Account name");
+    if (!name?.trim()) return;
+    const created = await createAccount(name.trim());
+    const activated = await activateAccount(created.account.id);
+    setSession({
+      ...session,
+      accounts: activated.accounts,
+      activeAccountId: activated.active_account_id,
+    });
+    setHeaderPrices({});
+    setAccountMenuOpen(false);
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    window.location.reload();
+  };
 
   return (
     <DashboardContext.Provider
-      value={{ positions, account, isConnected, error, reconnect }}
+      value={{ positions, account, isConnected, error, reconnect, session, setSession }}
     >
       <div className="flex min-h-screen">
         <Sidebar isConnected={isConnected} />
 
         <div className="flex-1 flex flex-col min-h-screen">
-          {/* Top Header Bar */}
           <header className="h-14 border-b border-border-subtle bg-bg-primary/70 backdrop-blur-xl sticky top-0 z-40">
             <div className="h-full px-4 lg:px-6 flex items-center justify-between gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-medium text-text-primary truncate">
-                  Portfolio
+                  {activeAccount?.name || "Portfolio"}
                 </p>
                 <p className="text-[11px] text-text-muted truncate hidden sm:block">
                   {isConnected
@@ -125,9 +256,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                 </div>
               </div>
 
-              {/* Right side */}
               <div className="flex items-center gap-4">
-                {/* Market Status Pills */}
                 <div className="hidden lg:flex items-center gap-3">
                   {HEADER_SYMBOLS.map((sym) => {
                     const price = headerPrices[sym.base];
@@ -169,7 +298,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   })}
                 </div>
 
-                {/* Notifications */}
                 <button className="relative w-9 h-9 rounded-xl bg-bg-tertiary/80 border border-border-subtle flex items-center justify-center hover:bg-bg-elevated transition-colors">
                   <Bell className="w-4 h-4 text-text-secondary" />
                   {isConnected && (
@@ -177,22 +305,72 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
                   )}
                 </button>
 
-                <button className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-xl bg-bg-tertiary/80 border border-border-subtle hover:bg-bg-elevated transition-colors">
-                  <div className="w-7 h-7 rounded-lg bg-bg-elevated border border-border-default flex items-center justify-center">
-                    <span className="text-[10px] font-semibold text-text-primary">SC</span>
-                  </div>
-                  <div className="text-left hidden lg:block">
-                    <p className="text-xs font-medium text-text-primary">Trader</p>
-                  </div>
-                  <ChevronDown className="w-3.5 h-3.5 text-text-muted hidden lg:block" />
-                </button>
+                <div className="relative">
+                  <button
+                    onClick={() => setAccountMenuOpen((open) => !open)}
+                    className="flex items-center gap-2 pl-1.5 pr-2 py-1 rounded-xl bg-bg-tertiary/80 border border-border-subtle hover:bg-bg-elevated transition-colors"
+                  >
+                    <div className="w-7 h-7 rounded-lg bg-bg-elevated border border-border-default flex items-center justify-center">
+                      <UserRound className="w-3.5 h-3.5 text-text-primary" />
+                    </div>
+                    <div className="text-left hidden lg:block max-w-36">
+                      <p className="text-xs font-medium text-text-primary truncate">
+                        {activeAccount?.name || session.user.email}
+                      </p>
+                    </div>
+                    <ChevronDown className="w-3.5 h-3.5 text-text-muted hidden lg:block" />
+                  </button>
+
+                  {accountMenuOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        onClick={() => setAccountMenuOpen(false)}
+                      />
+                      <div className="absolute right-0 top-full mt-2 w-64 p-2 rounded-xl bg-bg-elevated border border-border-subtle shadow-lg z-20">
+                        <div className="px-3 py-2 border-b border-border-subtle mb-1">
+                          <p className="text-xs font-medium text-text-primary truncate">
+                            {session.user.email}
+                          </p>
+                        </div>
+                        {session.accounts.map((item) => (
+                          <button
+                            key={item.id}
+                            onClick={() => handleSwitchAccount(item.id)}
+                            className={`w-full px-3 py-2 text-left text-sm rounded-lg transition-colors ${
+                              item.id === session.activeAccountId
+                                ? "bg-accent/20 text-accent"
+                                : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+                            }`}
+                          >
+                            {item.name}
+                          </button>
+                        ))}
+                        <div className="border-t border-border-subtle mt-2 pt-2 space-y-1">
+                          <button
+                            onClick={handleCreateAccount}
+                            className="w-full px-3 py-2 text-left text-sm text-text-secondary hover:bg-bg-tertiary hover:text-text-primary rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <Plus className="w-4 h-4" />
+                            New account
+                          </button>
+                          <button
+                            onClick={handleLogout}
+                            className="w-full px-3 py-2 text-left text-sm text-danger hover:bg-danger/10 rounded-lg transition-colors flex items-center gap-2"
+                          >
+                            <LogOut className="w-4 h-4" />
+                            Sign out
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
           </header>
 
-          {/* Main Content */}
           <main className="flex-1 p-4 lg:p-6 overflow-auto">
-            {/* Connection Error Banner */}
             {error && (
               <div className="mb-6 p-4 rounded-xl bg-danger/10 border border-danger/30 flex items-center justify-between animate-fade-in">
                 <div className="flex items-center gap-3">
@@ -220,7 +398,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   );
 }
 
-// Market status pill component
 function MarketPill({
   symbol,
   iconSymbol,

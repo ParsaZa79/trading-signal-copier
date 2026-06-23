@@ -5,8 +5,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+
+from ..account_store import get_active_account
+from ..runtime_data import account_prompts_path
 
 router = APIRouter()
 
@@ -114,20 +117,21 @@ Return JSON:
 Return ONLY valid JSON, no explanation outside the JSON."""
 
 
-def _load_custom_prompts() -> dict:
+def _load_custom_prompts(path: Path) -> dict:
     """Load custom prompts from file."""
-    if not PROMPTS_PATH.exists():
+    if not path.exists():
         return {}
     try:
-        return json.loads(PROMPTS_PATH.read_text(encoding="utf-8"))
+        return json.loads(path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return {}
 
 
-def _save_custom_prompts(data: dict) -> None:
+def _save_custom_prompts(path: Path, data: dict) -> None:
     """Save custom prompts to file."""
     data["modified_at"] = datetime.now().isoformat()
-    PROMPTS_PATH.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 class SavePromptsRequest(BaseModel):
@@ -139,14 +143,14 @@ class SavePromptsRequest(BaseModel):
 
 @router.get("")
 @router.get("/")
-async def get_prompts():
+async def get_prompts(account: dict = Depends(get_active_account)):
     """Get current system prompts.
 
     Returns the active prompts (custom if set, otherwise defaults)
     along with flags indicating which prompts are customized.
     """
     try:
-        custom = _load_custom_prompts()
+        custom = _load_custom_prompts(account_prompts_path(account["id"]))
 
         system_prompt = custom.get("system_prompt") or DEFAULT_SYSTEM_PROMPT
         correction_prompt = custom.get("correction_system_prompt") or DEFAULT_CORRECTION_SYSTEM_PROMPT
@@ -166,7 +170,10 @@ async def get_prompts():
 
 @router.put("")
 @router.put("/")
-async def save_prompts(request: SavePromptsRequest):
+async def save_prompts(
+    request: SavePromptsRequest,
+    account: dict = Depends(get_active_account),
+):
     """Save custom system prompts.
 
     Only saves prompts that are provided (non-None). Preserves existing
@@ -180,14 +187,15 @@ async def save_prompts(request: SavePromptsRequest):
             )
 
         # Load existing custom prompts to preserve unmodified ones
-        existing = _load_custom_prompts()
+        path = account_prompts_path(account["id"])
+        existing = _load_custom_prompts(path)
 
         if request.system_prompt is not None:
             existing["system_prompt"] = request.system_prompt
         if request.correction_system_prompt is not None:
             existing["correction_system_prompt"] = request.correction_system_prompt
 
-        _save_custom_prompts(existing)
+        _save_custom_prompts(path, existing)
         return {"success": True}
     except HTTPException:
         raise
@@ -197,18 +205,19 @@ async def save_prompts(request: SavePromptsRequest):
 
 @router.delete("")
 @router.delete("/")
-async def reset_all_prompts():
+async def reset_all_prompts(account: dict = Depends(get_active_account)):
     """Reset all prompts to defaults by removing the custom prompts file."""
     try:
-        if PROMPTS_PATH.exists():
-            PROMPTS_PATH.unlink()
+        path = account_prompts_path(account["id"])
+        if path.exists():
+            path.unlink()
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.delete("/{which}")
-async def reset_prompt(which: Literal["system", "correction"]):
+async def reset_prompt(which: Literal["system", "correction"], account: dict = Depends(get_active_account)):
     """Reset a specific prompt to its default.
 
     Args:
@@ -216,7 +225,8 @@ async def reset_prompt(which: Literal["system", "correction"]):
                "correction" to reset the correction parsing prompt.
     """
     try:
-        custom = _load_custom_prompts()
+        path = account_prompts_path(account["id"])
+        custom = _load_custom_prompts(path)
         key = "system_prompt" if which == "system" else "correction_system_prompt"
 
         if key in custom:
@@ -225,10 +235,10 @@ async def reset_prompt(which: Literal["system", "correction"]):
         # If no custom prompts remain, delete the file entirely
         remaining_keys = {k for k in custom if k != "modified_at"}
         if not remaining_keys:
-            if PROMPTS_PATH.exists():
-                PROMPTS_PATH.unlink()
+            if path.exists():
+                path.unlink()
         else:
-            _save_custom_prompts(custom)
+            _save_custom_prompts(path, custom)
 
         return {"success": True}
     except Exception as e:

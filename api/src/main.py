@@ -6,7 +6,7 @@ import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 # Load executor module directly to avoid importing telethon from bot's __init__.py
@@ -39,10 +39,13 @@ executor_module = _load_module_directly(
 MT5Executor = executor_module.MT5Executor
 
 from .config import config
-from .dependencies import clear_mt5_executor, set_mt5_executor
+from .account_store import ensure_default_account, get_websocket_account
+from .dependencies import clear_mt5_executor, get_executor_for_account_id, set_mt5_executor_factory
 from .routers import (
     account,
+    accounts,
     analysis,
+    auth,
     bot,
     health,
     mt5,
@@ -56,6 +59,7 @@ from .routers import (
     config as config_router,
 )
 from .routers.bot import set_log_manager
+from .security import bootstrap_admin_from_env, current_user_for_websocket, get_current_user
 from .services.history_service import init_database
 from .websocket.broadcaster import start_broadcaster
 from .websocket.log_manager import log_manager
@@ -78,27 +82,15 @@ async def lifespan(app: FastAPI):
     # Initialize database
     await init_database()
 
-    # Initialize MT5 executor
-    executor = MT5Executor(
-        login=config.mt5.login,
-        password=config.mt5.password,
-        server=config.mt5.server,
-        docker_host=config.mt5.docker_host,
-        docker_port=config.mt5.docker_port,
-        path=config.mt5.path,
+    set_mt5_executor_factory(MT5Executor)
+    admin = bootstrap_admin_from_env()
+    if admin:
+        ensure_default_account(admin)
+
+    # Start account-aware WebSocket broadcaster.
+    _broadcaster_task = asyncio.create_task(
+        start_broadcaster(get_executor_for_account_id, manager)
     )
-
-    # Connect to MT5
-    connected = executor.connect()
-    if connected:
-        print("MT5 connected successfully")
-        set_mt5_executor(executor)
-
-        # Start WebSocket broadcaster
-        _broadcaster_task = asyncio.create_task(start_broadcaster(executor, manager))
-    else:
-        print("Warning: MT5 connection failed. API will start but trading won't work.")
-        set_mt5_executor(executor)  # Set anyway for health checks
 
     yield
 
@@ -113,8 +105,6 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
-    # Disconnect MT5
-    executor.disconnect()
     clear_mt5_executor()
 
     print("Shutdown complete")
@@ -138,17 +128,20 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(health.router, prefix="/api/health", tags=["Health"])
-app.include_router(mt5.router, prefix="/api/mt5", tags=["MT5"])
-app.include_router(positions.router, prefix="/api/positions", tags=["Positions"])
-app.include_router(orders.router, prefix="/api/orders", tags=["Orders"])
-app.include_router(account.router, prefix="/api/account", tags=["Account"])
-app.include_router(symbols.router, prefix="/api/symbols", tags=["Symbols"])
-app.include_router(telegram.router, prefix="/api/telegram", tags=["Telegram"])
-app.include_router(bot.router, prefix="/api/bot", tags=["Bot"])
-app.include_router(config_router.router, prefix="/api/config", tags=["Config"])
-app.include_router(prompts.router, prefix="/api/prompts", tags=["Prompts"])
-app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"])
+protected = [Depends(get_current_user)]
+app.include_router(auth.router, prefix="/api/auth", tags=["Auth"])
+app.include_router(accounts.router, prefix="/api/accounts", tags=["Accounts"], dependencies=protected)
+app.include_router(health.router, prefix="/api/health", tags=["Health"], dependencies=protected)
+app.include_router(mt5.router, prefix="/api/mt5", tags=["MT5"], dependencies=protected)
+app.include_router(positions.router, prefix="/api/positions", tags=["Positions"], dependencies=protected)
+app.include_router(orders.router, prefix="/api/orders", tags=["Orders"], dependencies=protected)
+app.include_router(account.router, prefix="/api/account", tags=["Account"], dependencies=protected)
+app.include_router(symbols.router, prefix="/api/symbols", tags=["Symbols"], dependencies=protected)
+app.include_router(telegram.router, prefix="/api/telegram", tags=["Telegram"], dependencies=protected)
+app.include_router(bot.router, prefix="/api/bot", tags=["Bot"], dependencies=protected)
+app.include_router(config_router.router, prefix="/api/config", tags=["Config"], dependencies=protected)
+app.include_router(prompts.router, prefix="/api/prompts", tags=["Prompts"], dependencies=protected)
+app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"], dependencies=protected)
 
 
 @app.get("/")
@@ -167,7 +160,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
     Clients connect here to receive position and account updates.
     """
-    await manager.connect(websocket)
+    user = current_user_for_websocket(websocket)
+    account = get_websocket_account(user, websocket.query_params.get("account_id")) if user else None
+    if not user or not account:
+        await websocket.close(code=1008)
+        return
+
+    await manager.connect(websocket, account["id"])
     try:
         while True:
             # Keep connection alive, handle any client messages
@@ -188,7 +187,13 @@ async def logs_websocket_endpoint(websocket: WebSocket):
 
     Clients connect here to receive real-time bot output.
     """
-    connected = await log_manager.connect(websocket)
+    user = current_user_for_websocket(websocket)
+    account = get_websocket_account(user, websocket.query_params.get("account_id")) if user else None
+    if not user or not account:
+        await websocket.close(code=1008)
+        return
+
+    connected = await log_manager.connect(websocket, account["id"])
     if not connected:
         return
 
@@ -199,7 +204,7 @@ async def logs_websocket_endpoint(websocket: WebSocket):
             if data == "ping":
                 await websocket.send_text("pong")
             elif data == "clear":
-                log_manager.clear_buffer()
+                log_manager.clear_buffer(account["id"])
     except WebSocketDisconnect:
         log_manager.disconnect(websocket)
     except Exception as e:

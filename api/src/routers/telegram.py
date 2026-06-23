@@ -4,17 +4,20 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from ..account_store import get_active_account, load_account_config
+from ..runtime_data import account_telegram_session_path
 
 router = APIRouter()
 
-# Path to bot session file
-BOT_DIR = Path(__file__).parent.parent.parent.parent / "bot"
-SESSION_PATH = BOT_DIR / "signal_bot_session.session"
-
 
 @router.get("/channels")
-async def get_telegram_channels(api_id: int, api_hash: str):
+async def get_telegram_channels(
+    api_id: int | None = None,
+    api_hash: str | None = None,
+    account: dict = Depends(get_active_account),
+):
     """Get list of available Telegram channels/groups.
 
     Requires api_id and api_hash as query parameters.
@@ -26,13 +29,18 @@ async def get_telegram_channels(api_id: int, api_hash: str):
     - username: Username for public channels (optional)
     - type: "channel" | "group"
     """
-    if not SESSION_PATH.exists():
+    session_path = account_telegram_session_path(account["id"])
+    if not session_path.exists():
         raise HTTPException(
             status_code=404,
             detail="Telegram session not found. Please run the bot first to create a session.",
         )
 
-    if api_id <= 0 or not api_hash:
+    config = load_account_config(account["id"], reveal_secrets=True)
+    resolved_api_id = api_id or int(config.get("TELEGRAM_API_ID") or 0)
+    resolved_api_hash = api_hash or config.get("TELEGRAM_API_HASH") or ""
+
+    if resolved_api_id <= 0 or not resolved_api_hash:
         raise HTTPException(status_code=400, detail="Invalid API credentials")
 
     try:
@@ -51,11 +59,11 @@ async def get_telegram_channels(api_id: int, api_hash: str):
     try:
         temp_dir = tempfile.mkdtemp()
         temp_session = Path(temp_dir) / "temp_session"
-        shutil.copy(SESSION_PATH, temp_session.with_suffix(".session"))
+        shutil.copy(session_path, temp_session.with_suffix(".session"))
 
         async def _fetch() -> list[dict]:
             channels: list[dict] = []
-            client = TelegramClient(str(temp_session), api_id, api_hash)
+            client = TelegramClient(str(temp_session), resolved_api_id, resolved_api_hash)
 
             try:
                 await client.connect()

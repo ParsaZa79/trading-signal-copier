@@ -9,6 +9,7 @@ import {
   PanelBody,
   PageLoading,
 } from "@/components/layout";
+import { useDashboard } from "@/components/layout/dashboard-layout";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { getHealth } from "@/lib/api";
 import type { HealthStatus } from "@/types";
@@ -27,6 +28,7 @@ import { PageContainer, AnimatedSection } from "@/components/motion";
 import { formatCurrency } from "@/lib/utils";
 
 export default function SettingsPage() {
+  const { session } = useDashboard();
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -42,10 +44,11 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    setIsLoading(true);
     fetchHealth();
     const interval = setInterval(fetchHealth, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [session.activeAccountId]);
 
   return (
     <PageContainer className="max-w-[1400px]">

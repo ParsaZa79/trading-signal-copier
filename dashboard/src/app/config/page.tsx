@@ -13,6 +13,7 @@ import {
   PanelHeader,
   PanelBody,
 } from "@/components/layout";
+import { useDashboard } from "@/components/layout/dashboard-layout";
 import {
   getBotConfig,
   saveBotConfig,
@@ -63,7 +64,9 @@ interface ConfigSection {
 }
 
 export default function ConfigPage() {
+  const { session } = useDashboard();
   const [config, setConfig] = useState<Record<string, string>>({});
+  const [configuredSecrets, setConfiguredSecrets] = useState<string[]>([]);
   const [presets, setPresets] = useState<Array<{ name: string; created_at: string; modified_at: string }>>([]);
   const [currentPreset, setCurrentPreset] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -87,6 +90,17 @@ export default function ConfigPage() {
   const [isCustomCorrectionPrompt, setIsCustomCorrectionPrompt] = useState(false);
   const [promptsSaving, setPromptsSaving] = useState(false);
   const [promptsSaveStatus, setPromptsSaveStatus] = useState<"idle" | "success" | "error">("idle");
+
+  const applyConfiguredSecrets = useCallback((secrets: string[]) => {
+    setConfiguredSecrets(secrets);
+    setConfig((prev) => {
+      const next = { ...prev };
+      secrets.forEach((key) => {
+        next[key] = "";
+      });
+      return next;
+    });
+  }, []);
 
   const configSections: ConfigSection[] = [
     {
@@ -172,6 +186,7 @@ export default function ConfigPage() {
 
       if (configRes.success) {
         setConfig(configRes.config);
+        applyConfiguredSecrets(configRes.configuredSecrets || []);
       }
 
       if (presetsRes.success) {
@@ -192,11 +207,15 @@ export default function ConfigPage() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [applyConfiguredSecrets]);
 
   useEffect(() => {
+    setIsLoading(true);
+    setSaveStatus("idle");
+    setMt5ConnectStatus("idle");
+    setMt5ConnectMessage(null);
     loadData();
-  }, [loadData]);
+  }, [loadData, session.activeAccountId]);
 
   const handleRefreshChannels = useCallback(async () => {
     const apiId = config.TELEGRAM_API_ID;
@@ -234,8 +253,9 @@ export default function ConfigPage() {
     const login = config.MT5_LOGIN?.trim();
     const password = config.MT5_PASSWORD?.trim();
     const server = config.MT5_SERVER?.trim();
+    const hasStoredPassword = configuredSecrets.includes("MT5_PASSWORD");
 
-    if (!login || !password || !server || Number.isNaN(Number(login)) || Number(login) <= 0) {
+    if (!login || (!password && !hasStoredPassword) || !server || Number.isNaN(Number(login)) || Number(login) <= 0) {
       setMt5ConnectStatus("error");
       setMt5ConnectMessage("Enter a valid MT5 login, password, and server.");
       return;
@@ -245,7 +265,10 @@ export default function ConfigPage() {
     setMt5ConnectMessage(null);
 
     try {
-      await saveBotConfig(config);
+      const saved = await saveBotConfig(config);
+      if (saved.configuredSecrets) {
+        applyConfiguredSecrets(saved.configuredSecrets);
+      }
       const result = await connectMT5(config);
       if (!result.success || !result.connected) {
         setMt5ConnectStatus("error");
@@ -273,7 +296,10 @@ export default function ConfigPage() {
     setSaveStatus("idle");
 
     try {
-      await saveBotConfig(config);
+      const saved = await saveBotConfig(config);
+      if (saved.configuredSecrets) {
+        applyConfiguredSecrets(saved.configuredSecrets);
+      }
 
       if (currentPreset) {
         await savePreset(currentPreset, config);
@@ -294,6 +320,7 @@ export default function ConfigPage() {
       const res = await getPreset(name);
       if (res.success) {
         setConfig(res.preset.values);
+        applyConfiguredSecrets(res.preset.configuredSecrets || []);
         setCurrentPreset(name);
       }
     } catch (error) {
@@ -381,6 +408,8 @@ export default function ConfigPage() {
     warning: { bg: "bg-warning/10", border: "border-warning/30", text: "text-warning" },
     muted: { bg: "bg-bg-tertiary", border: "border-border-subtle", text: "text-text-muted" },
   };
+
+  const isSecretConfigured = (key: string) => configuredSecrets.includes(key);
 
   if (isLoading) {
     return (
@@ -535,7 +564,11 @@ export default function ConfigPage() {
                             onRefresh={handleRefreshChannels}
                             isLoading={isLoadingChannels}
                             error={channelsError}
-                            disabled={!config.TELEGRAM_API_ID || !config.TELEGRAM_API_HASH}
+                            disabled={
+                              !config.TELEGRAM_API_ID ||
+                              (!config.TELEGRAM_API_HASH &&
+                                !isSecretConfigured("TELEGRAM_API_HASH"))
+                            }
                           />
                         );
                       }
@@ -547,7 +580,11 @@ export default function ConfigPage() {
                           type={field.type}
                           value={config[field.key] || ""}
                           onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                          placeholder={field.placeholder}
+                          placeholder={
+                            field.type === "password" && isSecretConfigured(field.key)
+                              ? "Configured"
+                              : field.placeholder
+                          }
                         />
                       );
                     })}

@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { getPendingOrders, cancelOrder } from "@/lib/api";
 import type { PendingOrder } from "@/types";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   X,
   RefreshCw,
@@ -27,7 +27,7 @@ import { SymbolCell } from "@/components/dashboard/symbol-icon";
 import { PageContainer, AnimatedSection } from "@/components/motion";
 
 export default function PositionsPage() {
-  const { positions, reconnect } = useDashboard();
+  const { positions, reconnect, session } = useDashboard();
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
   const [isLoadingPending, setIsLoadingPending] = useState(true);
 
@@ -36,7 +36,7 @@ export default function PositionsPage() {
     [positions]
   );
 
-  const fetchPendingOrders = async () => {
+  const fetchPendingOrders = useCallback(async () => {
     try {
       const orders = await getPendingOrders();
       setPendingOrders(orders);
@@ -45,13 +45,15 @@ export default function PositionsPage() {
     } finally {
       setIsLoadingPending(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
+    setIsLoadingPending(true);
+    setPendingOrders([]);
     fetchPendingOrders();
     const interval = setInterval(fetchPendingOrders, 5000);
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchPendingOrders, session.activeAccountId]);
 
   const handleCancelOrder = async (ticket: number) => {
     if (!confirm("Are you sure you want to cancel this order?")) return;

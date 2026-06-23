@@ -7,6 +7,7 @@ Parses all messages and generates statistics for bot improvement analysis.
 
 import asyncio
 import json
+import os
 import sys
 from collections import defaultdict
 from datetime import datetime
@@ -18,7 +19,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from tania_signal_copier.parser import SignalParser
 
 # Files
-ANALYSIS_DIR = Path(__file__).parent.parent / "analysis"
+ANALYSIS_DIR = Path(
+    os.getenv("SIGNAL_ANALYSIS_DIR", str(Path(__file__).parent.parent / "analysis"))
+)
 INPUT_FILE = ANALYSIS_DIR / "signals_raw.json"
 OUTPUT_FILE = ANALYSIS_DIR / "signals_parsed.json"
 REPORT_FILE = ANALYSIS_DIR / "report.md"

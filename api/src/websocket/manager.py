@@ -11,17 +11,17 @@ class ConnectionManager:
 
     def __init__(self):
         """Initialize the connection manager."""
-        self.active_connections: set[WebSocket] = set()
+        self.active_connections: dict[str, set[WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket) -> None:
+    async def connect(self, websocket: WebSocket, account_id: str) -> None:
         """Accept and register a new WebSocket connection.
 
         Args:
             websocket: The WebSocket connection to accept.
         """
         await websocket.accept()
-        self.active_connections.add(websocket)
-        print(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+        self.active_connections.setdefault(account_id, set()).add(websocket)
+        print(f"WebSocket connected. Total connections: {self.connection_count}")
 
     def disconnect(self, websocket: WebSocket) -> None:
         """Remove a WebSocket connection.
@@ -29,8 +29,14 @@ class ConnectionManager:
         Args:
             websocket: The WebSocket connection to remove.
         """
-        self.active_connections.discard(websocket)
-        print(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+        empty_accounts: list[str] = []
+        for account_id, connections in self.active_connections.items():
+            connections.discard(websocket)
+            if not connections:
+                empty_accounts.append(account_id)
+        for account_id in empty_accounts:
+            self.active_connections.pop(account_id, None)
+        print(f"WebSocket disconnected. Total connections: {self.connection_count}")
 
     async def send_personal_message(self, message: dict, websocket: WebSocket) -> None:
         """Send a message to a specific client.
@@ -46,7 +52,7 @@ class ConnectionManager:
             print(f"Error sending personal message: {e}")
             self.disconnect(websocket)
 
-    async def broadcast(self, message: dict) -> None:
+    async def broadcast(self, account_id: str, message: dict) -> None:
         """Broadcast a message to all connected clients.
 
         Args:
@@ -55,7 +61,7 @@ class ConnectionManager:
         data = json.dumps(message, default=self._json_serializer)
         disconnected: set[WebSocket] = set()
 
-        for connection in self.active_connections:
+        for connection in self.active_connections.get(account_id, set()):
             try:
                 await connection.send_text(data)
             except Exception as e:
@@ -64,7 +70,12 @@ class ConnectionManager:
 
         # Clean up disconnected clients
         for conn in disconnected:
-            self.active_connections.discard(conn)
+            self.active_connections.get(account_id, set()).discard(conn)
+
+    @property
+    def account_ids(self) -> list[str]:
+        """Get account ids with active WebSocket subscribers."""
+        return list(self.active_connections.keys())
 
     @staticmethod
     def _json_serializer(obj):
@@ -76,7 +87,7 @@ class ConnectionManager:
     @property
     def connection_count(self) -> int:
         """Get the number of active connections."""
-        return len(self.active_connections)
+        return sum(len(connections) for connections in self.active_connections.values())
 
 
 # Global connection manager instance

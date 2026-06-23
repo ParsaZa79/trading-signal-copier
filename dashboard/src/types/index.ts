@@ -76,6 +76,7 @@ export interface TradeHistoryEntry {
 export interface WebSocketMessage {
   type: "update" | "error";
   timestamp: string;
+  account_id?: string;
   positions?: Position[];
   account?: AccountInfo;
   error?: string;

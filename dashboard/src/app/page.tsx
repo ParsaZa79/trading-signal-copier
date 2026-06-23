@@ -33,7 +33,7 @@ function getTodayDateRange() {
 }
 
 export default function DashboardPage() {
-  const { positions, account } = useDashboard();
+  const { positions, account, session } = useDashboard();
   const [todayTrades, setTodayTrades] = useState<TradeHistoryEntry[]>([]);
   const [isLoadingTrades, setIsLoadingTrades] = useState(true);
 
@@ -54,7 +54,7 @@ export default function DashboardPage() {
     fetchTodayTrades();
     const interval = setInterval(fetchTodayTrades, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [session.activeAccountId]);
 
   const floatingPnL = positions.reduce((sum, pos) => sum + pos.profit, 0);
   const winningPositions = positions.filter((pos) => pos.profit > 0).length;
@@ -74,7 +74,11 @@ export default function DashboardPage() {
   return (
     <PageContainer className="max-w-[1400px]">
       <AnimatedSection>
-        <PortfolioHero account={account} floatingPnL={floatingPnL} />
+        <PortfolioHero
+          account={account}
+          floatingPnL={floatingPnL}
+          accountId={session.activeAccountId}
+        />
       </AnimatedSection>
 
       <AnimatedSection className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

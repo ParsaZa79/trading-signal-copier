@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, Fragment } from "react";
 import { PageHeader, SectionPanel, PanelHeader, PanelBody, EmptyState } from "@/components/layout";
+import { useDashboard } from "@/components/layout/dashboard-layout";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -300,6 +301,7 @@ function GroupHeader({
 }
 
 export default function HistoryPage() {
+  const { session } = useDashboard();
   const [trades, setTrades] = useState<TradeHistoryEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -359,7 +361,7 @@ export default function HistoryPage() {
     };
 
     fetchHistory();
-  }, [page, dateRange]);
+  }, [page, dateRange, session.activeAccountId]);
 
   const handleTimeRangeChange = (preset: TimePreset, range: DateRange) => {
     setTimePreset(preset);

@@ -12,7 +12,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterable
 
-ANALYSIS_DIR = Path(__file__).parent.parent / "analysis"
+ANALYSIS_DIR = Path(os.getenv("SIGNAL_ANALYSIS_DIR", str(Path(__file__).parent.parent / "analysis")))
 INPUT_FILE = ANALYSIS_DIR / "signals_raw.json"
 OUTPUT_JSON = ANALYSIS_DIR / "signals_outcomes.json"
 REPORT_FILE = ANALYSIS_DIR / "report.md"

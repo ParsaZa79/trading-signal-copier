@@ -22,9 +22,10 @@ import {
 
 interface OrderFormProps {
   onSuccess?: () => void;
+  accountId?: string;
 }
 
-export function OrderForm({ onSuccess }: OrderFormProps) {
+export function OrderForm({ onSuccess, accountId }: OrderFormProps) {
   const [symbols, setSymbols] = useState<SymbolListItem[]>([]);
   const [isLoadingSymbols, setIsLoadingSymbols] = useState(true);
   const [formData, setFormData] = useState({
@@ -43,6 +44,8 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
   const isBuyOrder = formData.order_type.includes("buy");
 
   useEffect(() => {
+    setIsLoadingSymbols(true);
+    setSymbols([]);
     const fetchSymbols = async () => {
       try {
         const fetchedSymbols = await getSymbols();
@@ -59,7 +62,7 @@ export function OrderForm({ onSuccess }: OrderFormProps) {
       }
     };
     fetchSymbols();
-  }, []);
+  }, [accountId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

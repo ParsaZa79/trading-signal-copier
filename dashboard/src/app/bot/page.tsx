@@ -16,13 +16,11 @@ import { API_URL } from "@/lib/constants";
 import {
   Play,
   Square,
-  Bot,
   RefreshCw,
   Trash2,
   Loader2,
   Clock,
   Zap,
-  FileText,
   Server,
   Activity,
   AlertCircle,
@@ -40,8 +38,10 @@ import {
   TerminalPanel,
   EmptyState,
 } from "@/components/layout";
+import { useDashboard } from "@/components/layout/dashboard-layout";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { SymbolCell } from "@/components/dashboard/symbol-icon";
+import { buildAuthenticatedWsUrl } from "@/lib/auth-storage";
 import type { TrackedPosition } from "@/types";
 
 const IS_MACOS = typeof window !== "undefined" && navigator.platform.includes("Mac");
@@ -49,6 +49,7 @@ const IS_MACOS = typeof window !== "undefined" && navigator.platform.includes("M
 type BotStatusType = "stopped" | "starting" | "running" | "stopping" | "error";
 
 export default function BotControlPage() {
+  const { session } = useDashboard();
   const [status, setStatus] = useState<BotStatusType>("stopped");
   const [pid, setPid] = useState<number | undefined>();
   const [startedAt, setStartedAt] = useState<string | undefined>();
@@ -101,6 +102,7 @@ export default function BotControlPage() {
   }, []);
 
   useEffect(() => {
+    setIsLoading(true);
     fetchStatus();
     fetchPositions();
 
@@ -111,11 +113,15 @@ export default function BotControlPage() {
     }, 3000);
 
     return () => clearInterval(interval);
-  }, [fetchStatus, fetchPositions]);
+  }, [fetchStatus, fetchPositions, session.activeAccountId]);
 
   // WebSocket connection for log streaming
   useEffect(() => {
-    const wsUrl = API_URL.replace(/^http/, "ws") + "/ws/logs";
+    const wsUrl = buildAuthenticatedWsUrl(
+      `${API_URL.replace(/^http/, "ws")}/ws/logs`,
+      session.token,
+      session.activeAccountId
+    );
     let reconnectTimeout: NodeJS.Timeout;
     let ws: WebSocket | null = null;
     let isCleaningUp = false;
@@ -189,7 +195,7 @@ export default function BotControlPage() {
         wsRef.current = null;
       }
     };
-  }, []);
+  }, [session.activeAccountId, session.token]);
 
   // Auto-scroll logs
   useEffect(() => {
@@ -217,7 +223,7 @@ export default function BotControlPage() {
 
       if (res.success) {
         setStatus("starting");
-        addLog("info", `Bot starting${res.pid ? ` (PID: ${res.pid})` : ""}...`);
+        addLog("info", res.pid ? `Bot starting (PID: ${res.pid})...` : "Bot starting...");
       } else {
         setError(res.error);
         addLog("error", `Failed to start: ${res.error}`);

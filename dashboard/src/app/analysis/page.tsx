@@ -14,6 +14,7 @@ import {
   PanelBody,
   EmptyState,
 } from "@/components/layout";
+import { useDashboard } from "@/components/layout/dashboard-layout";
 import { getAnalysisSummary, runAnalysis } from "@/lib/api";
 import {
   BarChart3,
@@ -25,8 +26,6 @@ import {
   TrendingUp,
   TrendingDown,
   ArrowRight,
-  Clock,
-  Lightbulb,
   Zap,
   Calendar,
 } from "lucide-react";
@@ -46,6 +45,7 @@ interface AnalysisSummaryData {
 }
 
 export default function AnalysisPage() {
+  const { session } = useDashboard();
   const [summary, setSummary] = useState<AnalysisSummaryData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isFetching, setIsFetching] = useState(false);
@@ -71,8 +71,10 @@ export default function AnalysisPage() {
   }, []);
 
   useEffect(() => {
+    setIsLoading(true);
+    setOutput("");
     loadSummary();
-  }, [loadSummary]);
+  }, [loadSummary, session.activeAccountId]);
 
   const handleFetch = async () => {
     setIsFetching(true);

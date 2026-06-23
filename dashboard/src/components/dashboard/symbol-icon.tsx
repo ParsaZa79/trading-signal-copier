@@ -11,7 +11,6 @@ import { DynamicFlag } from "@sankyu/react-circle-flags";
 import {
   BarChart3,
   Bitcoin,
-  Coins,
   DollarSign,
   Droplets,
   Euro,

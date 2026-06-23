@@ -23,7 +23,10 @@ _first_channel = _raw_channel.split(",")[0].strip() if _raw_channel else "TaniaT
 # Convert numeric channel IDs to int so Telethon can resolve them
 CHANNEL: str | int = int(_first_channel) if _first_channel.lstrip("-").isdigit() else _first_channel
 # Session file is in the bot directory (parent of scripts) - matches config.py
-SESSION_NAME = str(Path(__file__).parent.parent / "signal_bot_session")
+SESSION_NAME = os.getenv(
+    "TELEGRAM_SESSION_NAME",
+    str(Path(__file__).parent.parent / "signal_bot_session"),
+)
 
 # Fetch settings (CLI overridable)
 DEFAULT_BATCH_SIZE = 50
@@ -31,7 +34,7 @@ DEFAULT_TOTAL_MESSAGES = 200
 DEFAULT_DELAY_SECONDS = 5.0
 
 # Output file
-OUTPUT_DIR = Path(__file__).parent.parent / "analysis"
+OUTPUT_DIR = Path(os.getenv("SIGNAL_ANALYSIS_DIR", str(Path(__file__).parent.parent / "analysis")))
 OUTPUT_FILE = OUTPUT_DIR / "signals_raw.json"
 
 

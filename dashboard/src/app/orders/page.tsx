@@ -18,7 +18,7 @@ interface PriceData {
 }
 
 export default function OrdersPage() {
-  const { reconnect } = useDashboard();
+  const { reconnect, session } = useDashboard();
   const [symbols, setSymbols] = useState<SymbolListItem[]>([]);
   const [prices, setPrices] = useState<Record<string, PriceData>>({});
   const [isLoadingSymbols, setIsLoadingSymbols] = useState(true);
@@ -26,6 +26,10 @@ export default function OrdersPage() {
   const symbolsRef = useRef<SymbolListItem[]>([]);
 
   useEffect(() => {
+    setIsLoadingSymbols(true);
+    setSymbols([]);
+    setPrices({});
+    symbolsRef.current = [];
     const fetchSymbols = async () => {
       try {
         const fetchedSymbols = await getSymbols();
@@ -38,7 +42,7 @@ export default function OrdersPage() {
       }
     };
     fetchSymbols();
-  }, []);
+  }, [session.activeAccountId]);
 
   const fetchPrices = useCallback(async () => {
     const currentSymbols = symbolsRef.current;
@@ -86,7 +90,7 @@ export default function OrdersPage() {
       </AnimatedSection>
 
       <AnimatedSection className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <OrderForm onSuccess={reconnect} />
+        <OrderForm onSuccess={reconnect} accountId={session.activeAccountId} />
 
         <SectionPanel>
           <PanelHeader

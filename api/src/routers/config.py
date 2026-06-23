@@ -3,10 +3,18 @@
 import json
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..runtime_data import CACHE_PATH, ENV_PATH, LAST_PRESET_PATH, PRESETS_DIR
+from ..account_store import (
+    decode_config,
+    encode_config,
+    get_active_account,
+    load_account_config,
+    sanitize_config,
+    save_account_config,
+)
+from ..runtime_data import ENV_PATH, account_last_preset_path, account_presets_dir
 
 router = APIRouter()
 
@@ -85,30 +93,9 @@ def _write_env_file(updates: dict[str, str]) -> None:
     ENV_PATH.write_text(content, encoding="utf-8")
 
 
-def _load_cache() -> dict[str, str]:
-    """Load cached config values."""
-    if not CACHE_PATH.exists():
-        return {}
-
-    try:
-        data = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-        if isinstance(data, dict):
-            return {str(k): str(v) for k, v in data.items()}
-    except Exception:
-        pass
-
-    return {}
-
-
-def _save_cache(values: dict[str, str]) -> None:
-    """Save config values to cache."""
-    CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CACHE_PATH.write_text(json.dumps(values, indent=2), encoding="utf-8")
-
-
-def _ensure_presets_dir() -> None:
+def _ensure_presets_dir(account_id: str) -> None:
     """Create presets directory if it doesn't exist."""
-    PRESETS_DIR.mkdir(parents=True, exist_ok=True)
+    account_presets_dir(account_id).mkdir(parents=True, exist_ok=True)
 
 
 def _sanitize_preset_name(name: str) -> str:
@@ -138,29 +125,29 @@ class SavePresetRequest(BaseModel):
 
 @router.get("")
 @router.get("/")
-async def get_config():
+async def get_config(account: dict = Depends(get_active_account)):
     """Get current bot configuration.
 
     Uses cached runtime values.
     If no cache exists yet, it imports values from legacy .env once.
     """
     try:
-        cache_values = _load_cache()
-        if cache_values:
-            return {"success": True, "config": cache_values}
-
-        # One-time fallback for older setups still using bot/.env
-        env_values = _read_env_file()
-        if env_values:
-            _save_cache(env_values)
-        return {"success": True, "config": env_values}
+        values = load_account_config(account["id"], reveal_secrets=True)
+        sanitized, configured_secrets = sanitize_config(values)
+        return {
+            "success": True,
+            "account_id": account["id"],
+            "config": sanitized,
+            "configuredSecrets": configured_secrets,
+            "secretFields": configured_secrets,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @router.put("")
 @router.put("/")
-async def save_config(request: SaveConfigRequest):
+async def save_config(request: SaveConfigRequest, account: dict = Depends(get_active_account)):
     """Save bot configuration.
 
     Always saves to cache. Optionally writes to .env file.
@@ -169,14 +156,18 @@ async def save_config(request: SaveConfigRequest):
         if not request.config or not isinstance(request.config, dict):
             raise HTTPException(status_code=400, detail="Invalid config")
 
-        # Always save to cache
-        _save_cache(request.config)
+        saved = save_account_config(account["id"], request.config)
 
-        # Optionally write to .env file
-        if request.write_env:
-            _write_env_file(request.config)
+        # Shared .env writes are intentionally disabled under multi-account mode.
+        # The bot receives account-scoped env vars when it starts.
+        _ = request.write_env
 
-        return {"success": True}
+        _, configured_secrets = sanitize_config(saved)
+        return {
+            "success": True,
+            "account_id": account["id"],
+            "configuredSecrets": configured_secrets,
+        }
     except HTTPException:
         raise
     except Exception as e:
@@ -189,13 +180,15 @@ async def save_config(request: SaveConfigRequest):
 
 
 @router.get("/presets")
-async def list_presets():
+async def list_presets(account: dict = Depends(get_active_account)):
     """List all saved presets."""
     try:
-        _ensure_presets_dir()
+        presets_dir = account_presets_dir(account["id"])
+        last_preset_path = account_last_preset_path(account["id"])
+        _ensure_presets_dir(account["id"])
 
         presets: list[dict] = []
-        for path in PRESETS_DIR.glob("*.json"):
+        for path in presets_dir.glob("*.json"):
             if path.name == "_last_preset.json":
                 continue
 
@@ -213,9 +206,9 @@ async def list_presets():
 
         # Get last used preset
         last_preset: str | None = None
-        if LAST_PRESET_PATH.exists():
+        if last_preset_path.exists():
             try:
-                data = json.loads(LAST_PRESET_PATH.read_text(encoding="utf-8"))
+                data = json.loads(last_preset_path.read_text(encoding="utf-8"))
                 last_preset = data.get("name")
             except Exception:
                 pass
@@ -226,21 +219,26 @@ async def list_presets():
 
 
 @router.get("/presets/{name}")
-async def get_preset(name: str):
+async def get_preset(name: str, account: dict = Depends(get_active_account)):
     """Get a specific preset by name."""
     try:
-        _ensure_presets_dir()
+        presets_dir = account_presets_dir(account["id"])
+        last_preset_path = account_last_preset_path(account["id"])
+        _ensure_presets_dir(account["id"])
 
         filename = _sanitize_preset_name(name) + ".json"
-        preset_path = PRESETS_DIR / filename
+        preset_path = presets_dir / filename
 
         if not preset_path.exists():
             raise HTTPException(status_code=404, detail="Preset not found")
 
         data = json.loads(preset_path.read_text(encoding="utf-8"))
+        values_payload = data.get("values", {})
+        values = decode_config(values_payload, reveal_secrets=True) if isinstance(values_payload, dict) else {}
+        sanitized, configured_secrets = sanitize_config(values)
 
         # Update last preset
-        LAST_PRESET_PATH.write_text(
+        last_preset_path.write_text(
             json.dumps({"name": data.get("name", name)}),
             encoding="utf-8",
         )
@@ -251,7 +249,8 @@ async def get_preset(name: str):
                 "name": data.get("name", name),
                 "created_at": data.get("created_at"),
                 "modified_at": data.get("modified_at"),
-                "values": data.get("values", {}),
+                "values": sanitized,
+                "configuredSecrets": configured_secrets,
             },
         }
     except HTTPException:
@@ -261,20 +260,23 @@ async def get_preset(name: str):
 
 
 @router.post("/presets")
-async def save_preset(request: SavePresetRequest):
+async def save_preset(request: SavePresetRequest, account: dict = Depends(get_active_account)):
     """Save a preset (create or update)."""
     try:
         if not request.name or not isinstance(request.name, str):
             raise HTTPException(status_code=400, detail="Invalid preset name")
 
-        _ensure_presets_dir()
+        presets_dir = account_presets_dir(account["id"])
+        last_preset_path = account_last_preset_path(account["id"])
+        _ensure_presets_dir(account["id"])
 
         filename = _sanitize_preset_name(request.name) + ".json"
-        preset_path = PRESETS_DIR / filename
+        preset_path = presets_dir / filename
         now = datetime.now().isoformat()
 
         # Preserve created_at if updating
         created_at = now
+        existing: dict = {}
         if preset_path.exists():
             try:
                 existing = json.loads(preset_path.read_text(encoding="utf-8"))
@@ -282,17 +284,22 @@ async def save_preset(request: SavePresetRequest):
             except Exception:
                 pass
 
+        existing_values = existing.get("values", {}) if isinstance(existing, dict) else {}
+
         data = {
             "name": request.name,
             "created_at": created_at,
             "modified_at": now,
-            "values": request.values or {},
+            "values": encode_config(
+                request.values or {},
+                existing_payload=existing_values if isinstance(existing_values, dict) else {},
+            ),
         }
 
         preset_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
         # Update last preset
-        LAST_PRESET_PATH.write_text(json.dumps({"name": request.name}), encoding="utf-8")
+        last_preset_path.write_text(json.dumps({"name": request.name}), encoding="utf-8")
 
         return {"success": True}
     except HTTPException:
@@ -302,13 +309,15 @@ async def save_preset(request: SavePresetRequest):
 
 
 @router.delete("/presets/{name}")
-async def delete_preset(name: str):
+async def delete_preset(name: str, account: dict = Depends(get_active_account)):
     """Delete a preset by name."""
     try:
-        _ensure_presets_dir()
+        presets_dir = account_presets_dir(account["id"])
+        last_preset_path = account_last_preset_path(account["id"])
+        _ensure_presets_dir(account["id"])
 
         filename = _sanitize_preset_name(name) + ".json"
-        preset_path = PRESETS_DIR / filename
+        preset_path = presets_dir / filename
 
         if not preset_path.exists():
             raise HTTPException(status_code=404, detail="Preset not found")
@@ -316,11 +325,11 @@ async def delete_preset(name: str):
         preset_path.unlink()
 
         # Clear last preset if it matches
-        if LAST_PRESET_PATH.exists():
+        if last_preset_path.exists():
             try:
-                data = json.loads(LAST_PRESET_PATH.read_text(encoding="utf-8"))
+                data = json.loads(last_preset_path.read_text(encoding="utf-8"))
                 if data.get("name") == name:
-                    LAST_PRESET_PATH.unlink()
+                    last_preset_path.unlink()
             except Exception:
                 pass
 

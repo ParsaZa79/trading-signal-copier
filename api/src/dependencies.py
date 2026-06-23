@@ -1,37 +1,114 @@
 """FastAPI dependencies for dependency injection."""
 
+from collections.abc import Callable
 from typing import Any
 
-# Global executor instance (initialized in lifespan)
-# Using Any type to avoid importing from bot package which requires telethon
-_mt5_executor: Any = None
+from fastapi import Depends
+
+from .account_store import get_active_account, load_account_config
+
+# Executor objects are keyed by authenticated dashboard account. The current
+# Dokploy MT5 bridge is still one shared terminal, so only one account can be
+# active against the bridge at a time.
+_executor_factory: Callable[..., Any] | None = None
+_mt5_executors: dict[str, Any] = {}
+_active_runtime_account_id: str | None = None
 
 
-def get_mt5_executor() -> Any:
-    """Get the MT5 executor instance.
-
-    Returns:
-        MT5Executor: The executor instance.
-
-    Raises:
-        RuntimeError: If executor is not initialized.
-    """
-    if _mt5_executor is None:
-        raise RuntimeError("MT5 executor not initialized")
-    return _mt5_executor
+def set_mt5_executor_factory(factory: Callable[..., Any]) -> None:
+    """Set the concrete MT5Executor factory after direct bot module loading."""
+    global _executor_factory
+    _executor_factory = factory
 
 
-def set_mt5_executor(executor: Any) -> None:
-    """Set the global MT5 executor instance.
-
-    Args:
-        executor: The MT5Executor instance to set.
-    """
-    global _mt5_executor
-    _mt5_executor = executor
+def _coerce_int(value: str | None, default: int) -> int:
+    try:
+        return int(value or default)
+    except (TypeError, ValueError):
+        return default
 
 
-def clear_mt5_executor() -> None:
-    """Clear the global MT5 executor instance."""
-    global _mt5_executor
-    _mt5_executor = None
+def _new_executor(account_id: str) -> Any:
+    if _executor_factory is None:
+        raise RuntimeError("MT5 executor factory not initialized")
+
+    config = load_account_config(account_id, reveal_secrets=True)
+    return _executor_factory(
+        login=_coerce_int(config.get("MT5_LOGIN"), 0),
+        password=config.get("MT5_PASSWORD", ""),
+        server=config.get("MT5_SERVER", ""),
+        docker_host=config.get("MT5_DOCKER_HOST") or None,
+        docker_port=_coerce_int(config.get("MT5_DOCKER_PORT"), 8001),
+        path=config.get("MT5_PATH") or None,
+    )
+
+
+def get_executor_for_account_id(account_id: str) -> Any:
+    """Get or create the executor for an account."""
+    executor = _mt5_executors.get(account_id)
+    if executor is None:
+        executor = _new_executor(account_id)
+        _mt5_executors[account_id] = executor
+    return executor
+
+
+def get_mt5_executor(account: dict = Depends(get_active_account)) -> Any:
+    """Get the active account's MT5 executor."""
+    executor = get_executor_for_account_id(account["id"])
+    if _active_runtime_account_id and _active_runtime_account_id != account["id"]:
+        if getattr(executor, "connected", False):
+            executor.disconnect()
+    return executor
+
+
+def connect_account_executor(account_id: str, config_values: dict[str, str]) -> dict:
+    """Connect one account to the shared MT5 bridge and mark it runtime-active."""
+    global _active_runtime_account_id
+
+    executor = get_executor_for_account_id(account_id)
+    result = executor.reconfigure(
+        login=_coerce_int(config_values.get("MT5_LOGIN"), 0),
+        password=config_values.get("MT5_PASSWORD", ""),
+        server=config_values.get("MT5_SERVER", ""),
+        docker_host=config_values.get("MT5_DOCKER_HOST") or None,
+        docker_port=_coerce_int(config_values.get("MT5_DOCKER_PORT"), 8001),
+        path=config_values.get("MT5_PATH") or None,
+    )
+
+    if result.get("success"):
+        for other_account_id, other_executor in list(_mt5_executors.items()):
+            if other_account_id != account_id and getattr(other_executor, "connected", False):
+                other_executor.disconnect()
+        _active_runtime_account_id = account_id
+
+    return result
+
+
+def active_runtime_account_id() -> str | None:
+    return _active_runtime_account_id
+
+
+def connected_executor_account_ids() -> list[str]:
+    return [
+        account_id
+        for account_id, executor in _mt5_executors.items()
+        if getattr(executor, "connected", False)
+    ]
+
+
+def clear_mt5_executor(account_id: str | None = None) -> None:
+    """Clear one account executor, or all executors during shutdown."""
+    global _active_runtime_account_id
+
+    if account_id is not None:
+        executor = _mt5_executors.pop(account_id, None)
+        if executor is not None:
+            executor.disconnect()
+        if _active_runtime_account_id == account_id:
+            _active_runtime_account_id = None
+        return
+
+    for executor in _mt5_executors.values():
+        executor.disconnect()
+    _mt5_executors.clear()
+    _active_runtime_account_id = None

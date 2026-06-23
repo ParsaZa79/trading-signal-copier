@@ -9,18 +9,26 @@ import sys
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from ..runtime_data import BOT_DIR, CACHE_PATH, ENV_PATH, PID_FILE, STATE_PATH
+from ..account_store import get_active_account, load_account_config, save_account_config
+from ..runtime_data import (
+    BOT_DIR,
+    account_pid_file,
+    account_prompts_path,
+    account_state_path,
+    account_telegram_session_name,
+)
 
 router = APIRouter()
 
-# Global state
-_bot_process: subprocess.Popen | None = None
-_bot_status: Literal["stopped", "starting", "running", "stopping", "error"] = "stopped"
-_bot_error: str | None = None
-_started_at: str | None = None
+# Per-account process state
+BotStatus = Literal["stopped", "starting", "running", "stopping", "error"]
+_bot_processes: dict[str, subprocess.Popen] = {}
+_bot_statuses: dict[str, BotStatus] = {}
+_bot_errors: dict[str, str | None] = {}
+_started_at: dict[str, str | None] = {}
 
 # Log manager will be injected from main.py
 _log_manager = None
@@ -52,50 +60,22 @@ def _format_env_value(value: str) -> str:
     return value
 
 
-async def _load_env_for_bot() -> dict[str, str]:
+async def _load_env_for_bot(account_id: str) -> dict[str, str]:
     """Load runtime config from cache, with one-time fallback to legacy .env."""
-    import json
-
-    env: dict[str, str] = {}
-    if CACHE_PATH.exists():
-        try:
-            cache = json.loads(CACHE_PATH.read_text(encoding="utf-8"))
-            if isinstance(cache, dict):
-                env.update({str(key): str(value) for key, value in cache.items()})
-            return {str(key): str(value) for key, value in env.items()}
-        except Exception:
-            return {}
-
-    # One-time fallback for old setups still storing config in .env
-    if ENV_PATH.exists():
-        try:
-            content = ENV_PATH.read_text(encoding="utf-8")
-            for line in content.splitlines():
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#") or "=" not in line:
-                    continue
-                key, raw_value = line.split("=", 1)
-                env[key.strip()] = _parse_env_value(raw_value)
-
-            if env:
-                CACHE_PATH.parent.mkdir(parents=True, exist_ok=True)
-                CACHE_PATH.write_text(json.dumps(env, indent=2), encoding="utf-8")
-        except Exception:
-            return {}
-
-    return env
+    return load_account_config(account_id, reveal_secrets=True)
 
 
-async def _check_bot_running() -> tuple[bool, int | None]:
+async def _check_bot_running(account_id: str) -> tuple[bool, int | None]:
     """Check if bot process is running.
 
     Returns (is_running, pid).
     """
-    if not PID_FILE.exists():
+    pid_file = account_pid_file(account_id)
+    if not pid_file.exists():
         return False, None
 
     try:
-        pid = int(PID_FILE.read_text().strip())
+        pid = int(pid_file.read_text().strip())
     except (ValueError, OSError):
         return False, None
 
@@ -106,13 +86,13 @@ async def _check_bot_running() -> tuple[bool, int | None]:
     except (ProcessLookupError, PermissionError):
         # Process doesn't exist, clean up PID file
         try:
-            PID_FILE.unlink()
+            pid_file.unlink()
         except OSError:
             pass
         return False, None
 
 
-async def _stream_output(proc: subprocess.Popen):
+async def _stream_output(proc: subprocess.Popen, account_id: str):
     """Stream process output to log manager."""
     global _log_manager
 
@@ -130,7 +110,7 @@ async def _stream_output(proc: subprocess.Popen):
                     break
                 text = line.decode("utf-8", errors="replace").rstrip()
                 if text and _log_manager:
-                    await _log_manager.broadcast_log(text, level)
+                    await _log_manager.broadcast_log(text, level, account_id)
             except Exception:
                 break
 
@@ -155,55 +135,52 @@ class StopBotRequest(BaseModel):
 
 
 @router.get("/status")
-async def get_bot_status():
+async def get_bot_status(account: dict = Depends(get_active_account)):
     """Get current bot status."""
-    global _bot_status, _bot_error, _started_at
+    account_id = account["id"]
 
-    running, pid = await _check_bot_running()
+    running, pid = await _check_bot_running(account_id)
 
     # Sync state if process died externally
-    if not running and _bot_status == "running":
-        _bot_status = "stopped"
-        _started_at = None
+    if not running and _bot_statuses.get(account_id) == "running":
+        _bot_statuses[account_id] = "stopped"
+        _started_at[account_id] = None
 
     return {
         "success": True,
-        "status": "running" if running else _bot_status,
+        "account_id": account_id,
+        "status": "running" if running else _bot_statuses.get(account_id, "stopped"),
         "pid": pid if running else None,
-        "started_at": _started_at if running else None,
-        "error": _bot_error,
+        "started_at": _started_at.get(account_id) if running else None,
+        "error": _bot_errors.get(account_id),
     }
 
 
 @router.post("/start")
-async def start_bot(request: StartBotRequest):
+async def start_bot(request: StartBotRequest, account: dict = Depends(get_active_account)):
     """Start the bot process."""
-    global _bot_process, _bot_status, _bot_error, _started_at
+    account_id = account["id"]
+    pid_file = account_pid_file(account_id)
+    state_path = account_state_path(account_id)
 
-    running, _ = await _check_bot_running()
-    if running or _bot_status in ("running", "starting"):
+    running, _ = await _check_bot_running(account_id)
+    if running or _bot_statuses.get(account_id) in ("running", "starting"):
         raise HTTPException(status_code=400, detail="Bot is already running")
 
-    _bot_status = "starting"
-    _bot_error = None
+    _bot_statuses[account_id] = "starting"
+    _bot_errors[account_id] = None
 
     try:
-        # Write config to .env if requested
+        # Persist config updates into the account-scoped encrypted config store.
         if request.write_env and request.config:
-            lines: list[str] = []
-            for key, value in request.config.items():
-                if isinstance(value, str):
-                    lines.append(f"{key}={_format_env_value(value)}")
-            ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+            save_account_config(account_id, request.config)
 
         # Load environment
-        env_vars = await _load_env_for_bot()
+        env_vars = await _load_env_for_bot(account_id)
         process_env = {**os.environ, **env_vars, "PYTHONUNBUFFERED": "1"}
-        process_env.setdefault("BOT_STATE_FILE", str(STATE_PATH))
-        process_env.setdefault(
-            "TELEGRAM_SESSION_NAME",
-            str(STATE_PATH.with_name("signal_bot_session")),
-        )
+        process_env["BOT_STATE_FILE"] = str(state_path)
+        process_env["TELEGRAM_SESSION_NAME"] = str(account_telegram_session_name(account_id))
+        process_env["SYSTEM_PROMPTS_FILE"] = str(account_prompts_path(account_id))
 
         # Build command
         uv_path = shutil.which("uv")
@@ -228,34 +205,33 @@ async def start_bot(request: StartBotRequest):
             start_new_session=True,
         )
 
-        _bot_process = proc
-        _started_at = datetime.now().isoformat()
+        _bot_processes[account_id] = proc
+        _started_at[account_id] = datetime.now().isoformat()
 
         # Save PID
         if proc.pid:
-            PID_FILE.write_text(str(proc.pid), encoding="utf-8")
+            pid_file.parent.mkdir(parents=True, exist_ok=True)
+            pid_file.write_text(str(proc.pid), encoding="utf-8")
 
-        _bot_status = "running"
+        _bot_statuses[account_id] = "running"
 
         # Start streaming output
-        await _stream_output(proc)
+        await _stream_output(proc, account_id)
 
         # Monitor process in background
         async def monitor():
-            global _bot_status, _bot_error, _bot_process, _started_at
-
             loop = asyncio.get_event_loop()
             code = await loop.run_in_executor(None, proc.wait)
 
-            _bot_status = "stopped"
+            _bot_statuses[account_id] = "stopped"
             if code != 0 and code is not None:
-                _bot_error = f"Process exited with code {code}"
+                _bot_errors[account_id] = f"Process exited with code {code}"
 
-            _bot_process = None
-            _started_at = None
+            _bot_processes.pop(account_id, None)
+            _started_at[account_id] = None
 
             try:
-                PID_FILE.unlink()
+                pid_file.unlink()
             except OSError:
                 pass
 
@@ -274,16 +250,17 @@ async def start_bot(request: StartBotRequest):
 
 
 @router.post("/stop")
-async def stop_bot():
+async def stop_bot(account: dict = Depends(get_active_account)):
     """Stop the bot process."""
-    global _bot_process, _bot_status, _started_at
+    account_id = account["id"]
+    pid_file = account_pid_file(account_id)
 
-    running, pid = await _check_bot_running()
+    running, pid = await _check_bot_running(account_id)
 
-    if not running and _bot_status != "running":
+    if not running and _bot_statuses.get(account_id) != "running":
         raise HTTPException(status_code=400, detail="Bot is not running")
 
-    _bot_status = "stopping"
+    _bot_statuses[account_id] = "stopping"
 
     # Try to stop by PID
     if pid:
@@ -305,14 +282,16 @@ async def stop_bot():
             pass
 
     # Also try process handle
-    if _bot_process:
+    bot_process = _bot_processes.get(account_id)
+    if bot_process:
         try:
-            _bot_process.terminate()
+            bot_process.terminate()
 
             async def force_kill_proc():
                 await asyncio.sleep(5)
-                if _bot_process and _bot_process.poll() is None:
-                    _bot_process.kill()
+                proc = _bot_processes.get(account_id)
+                if proc and proc.poll() is None:
+                    proc.kill()
 
             asyncio.create_task(force_kill_proc())
 
@@ -321,25 +300,27 @@ async def stop_bot():
 
     # Clean up
     try:
-        PID_FILE.unlink()
+        pid_file.unlink()
     except OSError:
         pass
 
-    _bot_status = "stopped"
-    _bot_process = None
-    _started_at = None
+    _bot_statuses[account_id] = "stopped"
+    _bot_processes.pop(account_id, None)
+    _started_at[account_id] = None
 
     return {"success": True, "status": "stopped"}
 
 
 @router.get("/positions")
-async def get_tracked_positions():
+async def get_tracked_positions(account: dict = Depends(get_active_account)):
     """Get bot's tracked positions from state file."""
     import json
 
-    if not STATE_PATH.exists():
+    state_path = account_state_path(account["id"])
+    if not state_path.exists():
         return {
             "success": True,
+            "account_id": account["id"],
             "positions": [],
             "total": 0,
             "open": 0,
@@ -347,7 +328,7 @@ async def get_tracked_positions():
         }
 
     try:
-        data = json.loads(STATE_PATH.read_text(encoding="utf-8"))
+        data = json.loads(state_path.read_text(encoding="utf-8"))
         positions_data = data.get("positions", {})
         positions: list[dict] = []
 
@@ -389,6 +370,7 @@ async def get_tracked_positions():
 
         return {
             "success": True,
+            "account_id": account["id"],
             "positions": positions,
             "total": len(positions),
             "open": sum(1 for p in positions if p.get("status") == "open"),
@@ -400,11 +382,12 @@ async def get_tracked_positions():
 
 
 @router.delete("/positions")
-async def clear_tracked_positions():
+async def clear_tracked_positions(account: dict = Depends(get_active_account)):
     """Clear bot's tracked positions state file."""
     try:
-        if STATE_PATH.exists():
-            STATE_PATH.unlink()
+        state_path = account_state_path(account["id"])
+        if state_path.exists():
+            state_path.unlink()
         return {"success": True}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e

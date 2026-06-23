@@ -8,6 +8,7 @@ trading signals from Telegram messages into structured TradeSignal objects.
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -21,7 +22,12 @@ if TYPE_CHECKING:
     from tania_signal_copier.llm import LLMProvider
 
 # Path to custom system prompts file (written by the dashboard API)
-_CUSTOM_PROMPTS_PATH = Path(__file__).parent.parent.parent / ".system_prompts.json"
+_CUSTOM_PROMPTS_PATH = Path(
+    os.getenv(
+        "SYSTEM_PROMPTS_FILE",
+        str(Path(__file__).parent.parent.parent / ".system_prompts.json"),
+    )
+)
 
 
 class SignalParser:
