@@ -46,6 +46,9 @@ From `src/config.py` / `.env.example`:
 - `CLERK_AUTHORIZED_PARTIES` comma-separated allowed dashboard origins
 - `ACCESS_BOOTSTRAP_EMAILS` comma-separated emails allowed to become the first Clerk owner
 
+The dashboard service also needs `CLERK_SECRET_KEY` because Clerk's Next.js middleware
+runs on the dashboard server.
+
 ## Main Endpoints
 
 - Health: `/api/health`
