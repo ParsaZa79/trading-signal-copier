@@ -18,7 +18,7 @@ async function proxyApiRequest(request: NextRequest, context: RouteContext) {
   if (!userId) {
     return Response.json({ detail: "Authentication required" }, { status: 401 });
   }
-  const proxySecret = process.env.DASHBOARD_PROXY_SECRET || process.env.CLERK_SECRET_KEY;
+  const proxySecret = process.env.DASHBOARD_PROXY_SECRET;
   if (!proxySecret) {
     return Response.json({ detail: "Dashboard proxy is not configured" }, { status: 500 });
   }

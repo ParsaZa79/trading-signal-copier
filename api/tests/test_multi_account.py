@@ -100,7 +100,7 @@ def test_clerk_verifier_prefers_token_issuer_jwks(monkeypatch):
 
 def test_dashboard_proxy_headers_authenticate_clerk_user(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
-    monkeypatch.setenv("CLERK_SECRET_KEY", "shared-secret")
+    monkeypatch.setenv("DASHBOARD_PROXY_SECRET", "shared-secret")
     monkeypatch.setattr(
         security,
         "get_clerk_user_email",

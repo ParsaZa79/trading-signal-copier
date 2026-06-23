@@ -273,7 +273,7 @@ def _clerk_email_from_claims(claims: dict[str, Any]) -> str | None:
 
 
 def _clerk_user_from_proxy_headers(headers: Any) -> dict[str, Any] | None:
-    proxy_secret = os.getenv("DASHBOARD_PROXY_SECRET") or os.getenv("CLERK_SECRET_KEY")
+    proxy_secret = os.getenv("DASHBOARD_PROXY_SECRET")
     supplied_secret = headers.get("x-dashboard-proxy-auth")
     if not supplied_secret:
         return None

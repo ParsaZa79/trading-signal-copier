@@ -44,12 +44,14 @@ From `src/config.py` / `.env.example`:
 - `CLERK_ISSUER` or `CLERK_JWKS_URL` for Clerk JWT verification when not using the default JWKS URL
 - `CLERK_JWT_KEY` for offline Clerk JWT verification with a PEM public key
 - `CLERK_AUTHORIZED_PARTIES` comma-separated allowed dashboard origins
+- `DASHBOARD_PROXY_SECRET` shared with the dashboard server for same-origin API proxy auth
 - `ACCESS_BOOTSTRAP_EMAILS` comma-separated emails allowed to become the first Clerk owner
 - `ACCESS_REQUIRE_INVITE=true` to disable Clerk self-service access for new users
 - `ACCESS_SELF_SIGNUP_ROLE` default role for self-service Clerk users (`trader` by default)
 
 The dashboard service also needs `CLERK_SECRET_KEY` because Clerk's Next.js middleware
-runs on the dashboard server.
+runs on the dashboard server. The dashboard and API must also share the same
+`DASHBOARD_PROXY_SECRET`; do not reuse the Clerk secret for that value.
 
 ## Main Endpoints
 
