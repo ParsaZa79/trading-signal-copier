@@ -5,6 +5,7 @@ import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
+from starlette.datastructures import Headers
 
 from src import access_store, account_store, clerk_client, dependencies, runtime_data, security
 
@@ -95,6 +96,33 @@ def test_clerk_verifier_prefers_token_issuer_jwks(monkeypatch):
     assert claims is not None
     assert claims["sub"] == "user_clerk_owner"
     assert urls == [f"{issuer}/.well-known/jwks.json"]
+
+
+def test_dashboard_proxy_headers_authenticate_clerk_user(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+    monkeypatch.setenv("CLERK_SECRET_KEY", "shared-secret")
+    monkeypatch.setattr(
+        security,
+        "get_clerk_user_email",
+        lambda clerk_user_id: "proxy-user@example.com",
+    )
+
+    user = security._clerk_user_from_proxy_headers(
+        Headers(
+            {
+                "x-dashboard-proxy-auth": "shared-secret",
+                "x-clerk-user-id": "user_clerk_proxy",
+                "x-clerk-session-id": "sess_proxy",
+            }
+        )
+    )
+
+    assert user is not None
+    assert user["id"] == "user_clerk_proxy"
+    assert user["email"] == "proxy-user@example.com"
+    assert user["role"] == "owner"
+    assert user["auth_provider"] == "clerk"
+    assert user["session_id"] == "sess_proxy"
 
 
 def test_account_config_encrypts_and_masks_secrets(monkeypatch, tmp_path):

@@ -272,10 +272,49 @@ def _clerk_email_from_claims(claims: dict[str, Any]) -> str | None:
     return None
 
 
+def _clerk_user_from_proxy_headers(headers: Any) -> dict[str, Any] | None:
+    proxy_secret = os.getenv("DASHBOARD_PROXY_SECRET") or os.getenv("CLERK_SECRET_KEY")
+    supplied_secret = headers.get("x-dashboard-proxy-auth")
+    if not supplied_secret:
+        return None
+    if not proxy_secret or not hmac.compare_digest(str(supplied_secret), proxy_secret):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    clerk_user_id = str(headers.get("x-clerk-user-id") or "")
+    if not clerk_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    from .access_store import resolve_clerk_member
+
+    email = str(headers.get("x-clerk-user-email") or "").lower() or None
+    if not email:
+        email = get_clerk_user_email(clerk_user_id)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+
+    member = resolve_clerk_member(clerk_user_id, email)
+    member["auth_provider"] = "clerk"
+    member["session_id"] = headers.get("x-clerk-session-id")
+    return member
+
+
 async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> dict[str, Any]:
+    proxy_user = _clerk_user_from_proxy_headers(request.headers)
+    if proxy_user is not None:
+        return proxy_user
+
     token = credentials.credentials if credentials else None
     if token is None:
         token = request.cookies.get("sc_session")
