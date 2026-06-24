@@ -5,11 +5,17 @@ const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
 const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
 
 export default clerkEnabled
-  ? clerkMiddleware(async (auth, req) => {
-      if (!isPublicRoute(req)) {
-        await auth.protect();
+  ? clerkMiddleware(
+      async (auth, req) => {
+        if (!isPublicRoute(req)) {
+          await auth.protect();
+        }
+      },
+      {
+        signInUrl: "/sign-in",
+        signUpUrl: "/sign-up",
       }
-    })
+    )
   : function proxy() {
       return NextResponse.next();
     };

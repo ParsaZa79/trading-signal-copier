@@ -9,7 +9,7 @@ export default function SignUpPage() {
   }
 
   return (
-    <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6">
+    <main className="grid min-h-dvh place-items-center bg-bg-primary p-6">
       <SignUp signInUrl="/sign-in" fallbackRedirectUrl="/" />
     </main>
   );
@@ -17,7 +17,7 @@ export default function SignUpPage() {
 
 function AuthNotConfigured() {
   return (
-    <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6">
+    <main className="grid min-h-dvh place-items-center bg-bg-primary p-6">
       <div className="w-full max-w-md rounded-xl border border-border-subtle bg-bg-secondary p-6">
         <p className="text-xs uppercase tracking-wider text-text-muted">Access</p>
         <h1 className="mt-2 text-xl font-semibold text-text-primary">Clerk is not configured</h1>
