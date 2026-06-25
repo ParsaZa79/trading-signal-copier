@@ -374,7 +374,7 @@ export default function HistoryPage() {
   const winningTrades = trades.filter((t) => t.profit > 0).length;
 
   return (
-    <PageContainer className="max-w-[1400px]">
+    <PageContainer>
       <AnimatedSection>
         <PageHeader
           meta="Performance"

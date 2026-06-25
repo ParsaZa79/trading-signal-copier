@@ -421,14 +421,14 @@ export default function ConfigPage() {
 
   if (isLoading) {
     return (
-      <PageContainer className="max-w-[1400px]">
+      <PageContainer>
         <PageLoading label="Loading configuration…" />
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer className="max-w-[1400px]">
+    <PageContainer>
       <AnimatedSection>
         <PageHeader
           meta="Setup"

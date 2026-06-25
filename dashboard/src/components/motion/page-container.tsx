@@ -13,12 +13,12 @@ export function PageContainer({ children, className }: PageContainerProps) {
   const prefersReducedMotion = useReducedMotion();
 
   if (prefersReducedMotion) {
-    return <div className={cn("space-y-6", className)}>{children}</div>;
+    return <div className={cn("w-full min-w-0 space-y-6", className)}>{children}</div>;
   }
 
   return (
     <motion.div
-      className={cn("space-y-6", className)}
+      className={cn("w-full min-w-0 space-y-6", className)}
       variants={staggerContainer}
       initial="initial"
       animate="animate"

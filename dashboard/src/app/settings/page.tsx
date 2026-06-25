@@ -51,7 +51,7 @@ export default function SettingsPage() {
   }, [session.activeAccountId]);
 
   return (
-    <PageContainer className="max-w-[1400px]">
+    <PageContainer>
       <AnimatedSection>
         <PageHeader
           meta="System"

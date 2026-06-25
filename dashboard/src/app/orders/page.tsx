@@ -80,7 +80,7 @@ export default function OrdersPage() {
   }, [symbols, fetchPrices]);
 
   return (
-    <PageContainer className="max-w-[1400px]">
+    <PageContainer>
       <AnimatedSection>
         <PageHeader
           meta="Execution"

@@ -79,7 +79,7 @@ export default function DashboardPage() {
       : 0;
 
   return (
-    <PageContainer className="max-w-[1400px]">
+    <PageContainer>
       <AnimatedSection>
         <PortfolioHero
           account={account}

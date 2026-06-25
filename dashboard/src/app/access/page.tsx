@@ -115,7 +115,7 @@ export default function AccessPage() {
   };
 
   return (
-    <PageContainer className="max-w-[1400px]">
+    <PageContainer>
       <AnimatedSection>
         <PageHeader
           meta="Security"

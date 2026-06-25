@@ -205,14 +205,14 @@ export default function SetupPage() {
 
   if (isLoading) {
     return (
-      <PageContainer className="max-w-[1100px]">
+      <PageContainer>
         <PageLoading label="Loading account setup..." />
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer className="max-w-[1100px]">
+    <PageContainer>
       <AnimatedSection>
         <PageHeader
           meta="Account setup"

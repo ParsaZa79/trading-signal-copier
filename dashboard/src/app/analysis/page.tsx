@@ -137,7 +137,7 @@ export default function AnalysisPage() {
 
   if (isLoading) {
     return (
-      <PageContainer className="max-w-[1400px]">
+      <PageContainer>
         <PageLoading label="Loading analysis…" />
       </PageContainer>
     );
@@ -146,7 +146,7 @@ export default function AnalysisPage() {
   const isRunning = isFetching || isGenerating;
 
   return (
-    <PageContainer className="max-w-[1400px]">
+    <PageContainer>
       <AnimatedSection>
         <PageHeader
           meta="Research"

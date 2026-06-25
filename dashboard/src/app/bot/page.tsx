@@ -335,14 +335,14 @@ export default function BotControlPage() {
 
   if (isLoading) {
     return (
-      <PageContainer className="max-w-[1400px]">
+      <PageContainer>
         <PageLoading label="Loading bot status…" />
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer className="max-w-[1400px]">
+    <PageContainer>
       <AnimatedSection>
         <PageHeader
           meta="Automation"
