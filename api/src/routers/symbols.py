@@ -1,5 +1,7 @@
 """Symbols router for symbol information and prices."""
 
+from typing import Annotated, Any
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -7,6 +9,7 @@ from ..dependencies import get_mt5_executor
 from ..symbol_utils import to_base_symbol
 
 router = APIRouter()
+MT5ExecutorDependency = Annotated[Any, Depends(get_mt5_executor)]
 
 
 class SymbolInfo(BaseModel):
@@ -36,6 +39,8 @@ class PriceResponse(BaseModel):
     bid: float
     ask: float
     spread: float
+    daily_open: float | None = None
+    daily_change_percent: float | None = None
 
 
 # Priority symbols to show at the top (common forex and commodity symbols)
@@ -51,6 +56,8 @@ PRIORITY_SYMBOLS = [
     "XAGUSD",
 ]
 
+TIMEFRAME_D1 = 16408
+
 
 def _get_symbol_label(symbol: str) -> str:
     """Get a display label for a symbol."""
@@ -62,8 +69,31 @@ def _get_symbol_label(symbol: str) -> str:
     return symbol
 
 
+def _rate_value(rate, key: str) -> float | None:
+    if rate is None:
+        return None
+    try:
+        value = rate[key]
+    except (KeyError, TypeError, IndexError, ValueError):
+        value = getattr(rate, key, None)
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _daily_open(executor, symbol: str) -> float | None:
+    try:
+        rates = executor._mt5.copy_rates_from_pos(symbol, TIMEFRAME_D1, 0, 1)
+    except Exception:
+        return None
+    if rates is None or len(rates) == 0:
+        return None
+    return _rate_value(rates[0], "open")
+
+
 @router.get("/", response_model=list[SymbolListItem])
-async def list_symbols(executor=Depends(get_mt5_executor)) -> list[SymbolListItem]:
+async def list_symbols(executor: MT5ExecutorDependency) -> list[SymbolListItem]:
     """Get list of available symbols from the broker.
 
     Returns:
@@ -100,7 +130,7 @@ async def list_symbols(executor=Depends(get_mt5_executor)) -> list[SymbolListIte
 
 
 @router.get("/{symbol}/info", response_model=SymbolInfo)
-async def get_symbol_info(symbol: str, executor=Depends(get_mt5_executor)) -> SymbolInfo:
+async def get_symbol_info(symbol: str, executor: MT5ExecutorDependency) -> SymbolInfo:
     """Get detailed information about a symbol.
 
     Args:
@@ -127,7 +157,7 @@ async def get_symbol_info(symbol: str, executor=Depends(get_mt5_executor)) -> Sy
 
 
 @router.get("/{symbol}/price", response_model=PriceResponse)
-async def get_symbol_price(symbol: str, executor=Depends(get_mt5_executor)) -> PriceResponse:
+async def get_symbol_price(symbol: str, executor: MT5ExecutorDependency) -> PriceResponse:
     """Get current bid/ask price for a symbol.
 
     Args:
@@ -153,9 +183,17 @@ async def get_symbol_price(symbol: str, executor=Depends(get_mt5_executor)) -> P
         raise HTTPException(status_code=503, detail=f"Could not get price for {symbol}")
 
     spread = round((tick.ask - tick.bid) / info["info"].point, 1)
+    daily_open = _daily_open(executor, actual_symbol)
+    daily_change_percent = (
+        ((tick.bid - daily_open) / daily_open) * 100
+        if daily_open and daily_open > 0
+        else None
+    )
     return PriceResponse(
         symbol=actual_symbol,
         bid=tick.bid,
         ask=tick.ask,
         spread=spread,
+        daily_open=daily_open,
+        daily_change_percent=daily_change_percent,
     )

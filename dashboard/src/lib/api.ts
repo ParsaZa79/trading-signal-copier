@@ -384,7 +384,14 @@ export async function getSymbols(): Promise<SymbolListItem[]> {
 
 export async function getSymbolPrice(
   symbol: string
-): Promise<{ symbol: string; bid: number; ask: number; spread: number }> {
+): Promise<{
+  symbol: string;
+  bid: number;
+  ask: number;
+  spread: number;
+  daily_open?: number | null;
+  daily_change_percent?: number | null;
+}> {
   return fetchApi(`/api/symbols/${toBrokerSymbol(symbol)}/price`);
 }
 

@@ -34,7 +34,7 @@ interface PriceData {
   bid: number;
   ask: number;
   spread: number;
-  prevBid?: number;
+  daily_change_percent?: number | null;
 }
 
 interface DashboardContextType {
@@ -348,14 +348,11 @@ function AuthenticatedDashboardLayout({
         })
       );
 
-      setHeaderPrices((prev) => {
+      setHeaderPrices(() => {
         const newPrices: Record<string, PriceData> = {};
         results.forEach((result) => {
           if (result?.data) {
-            newPrices[result.base] = {
-              ...result.data,
-              prevBid: prev[result.base]?.bid,
-            };
+            newPrices[result.base] = result.data;
           }
         });
         return newPrices;
@@ -490,9 +487,7 @@ function AuthenticatedDashboardLayout({
                       );
                     }
 
-                    const change = price.prevBid
-                      ? ((price.bid - price.prevBid) / price.prevBid) * 100
-                      : 0;
+                    const change = price.daily_change_percent ?? 0;
 
                     return (
                       <MarketPill
