@@ -545,7 +545,6 @@ export default function ConfigPage() {
         <PageHeader
           meta="Setup"
           title="Configuration"
-          description="Bot settings and runtime presets"
           actions={
             <>
             {/* Preset Selector */}
@@ -625,205 +624,103 @@ export default function ConfigPage() {
         />
       </AnimatedSection>
 
-      {/* Current Preset Badge */}
-      {currentPreset && (
-        <AnimatedSection>
-          <Badge variant="default" className="bg-accent/20 text-accent border-accent/30">
-            Active Preset: {currentPreset}
-          </Badge>
-        </AnimatedSection>
-      )}
-
-      {/* Config Sections */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {configSections.map((section, idx) => {
-          const colors = colorStyles[section.color];
-
-          return (
-            <AnimatedSection key={section.title} className={`stagger-${idx + 1}`}>
-              <SectionPanel>
-                <PanelHeader
-                  eyebrow={section.title}
-                  title={section.title}
-                  action={
-                    <span className={colors.text}>{section.icon}</span>
-                  }
-                />
-                <PanelBody>
-                  <div className="space-y-4">
-                    {section.fields.map((field) => {
-                      if (field.condition && !field.condition()) return null;
-
-                      if (field.type === "select") {
-                        return (
-                          <div key={field.key} className="space-y-4">
-                            <Select
-                              label={field.label}
-                              value={
-                                field.key === "MT5_SERVER"
-                                  ? selectedBrokerServer
-                                  : config[field.key] || ""
-                              }
-                              onChange={(e) =>
-                                field.key === "MT5_SERVER"
-                                  ? handleBrokerServerChange(e.target.value)
-                                  : handleFieldChange(field.key, e.target.value)
-                              }
-                              options={field.options || []}
-                              placeholder={field.placeholder}
-                            />
-                            {field.key === "MT5_SERVER" && useCustomBrokerServer && (
-                              <Input
-                                label="Server name"
-                                value={config.MT5_SERVER || ""}
-                                onChange={(e) => handleFieldChange("MT5_SERVER", e.target.value)}
-                                placeholder="Exact MT5 server"
-                              />
-                            )}
-                          </div>
-                        );
-                      }
-
-                      return (
-                        <Input
-                          key={field.key}
-                          label={field.label}
-                          type={field.type}
-                          value={config[field.key] || ""}
-                          onChange={(e) => handleFieldChange(field.key, e.target.value)}
-                          placeholder={
-                            field.type === "password" && isSecretConfigured(field.key)
-                              ? "Configured"
-                              : field.placeholder
-                          }
-                        />
-                      );
-                    })}
-                    {section.title === "MetaTrader 5" && (
-                      <div className="pt-4 border-t border-border-subtle space-y-3">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div className="min-w-0">
-                            <p className="text-sm font-medium text-text-primary">
-                              Runtime connection
-                            </p>
-                            <p className="text-xs text-text-muted mt-1">
-                              Saves these credentials and reconnects the running API process.
-                            </p>
-                          </div>
-                          <Button
-                            variant="secondary"
-                            onClick={handleConnectMt5}
-                            disabled={mt5ConnectStatus === "connecting"}
-                          >
-                            {mt5ConnectStatus === "connecting" ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : mt5ConnectStatus === "success" ? (
-                              <Check className="w-4 h-4 text-success" />
-                            ) : mt5ConnectStatus === "error" ? (
-                              <AlertCircle className="w-4 h-4 text-danger" />
-                            ) : (
-                              <Server className="w-4 h-4" />
-                            )}
-                            <span>Save & Connect</span>
-                          </Button>
-                        </div>
-                        {mt5ConnectMessage && (
-                          <div
-                            className={`rounded-xl border px-4 py-3 text-xs ${
-                              mt5ConnectStatus === "success"
-                                ? "border-success/20 bg-success/10 text-success"
-                                : "border-danger/20 bg-danger/10 text-danger"
-                            }`}
-                          >
-                            {mt5ConnectMessage}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </PanelBody>
-              </SectionPanel>
-            </AnimatedSection>
-          );
-        })}
-      </div>
-
-      {/* System Prompts Section */}
       <AnimatedSection>
-        <SectionPanel>
-          <PanelHeader
-            eyebrow="LLM"
-            title="System prompts"
-            description="Controls how the AI parses trading signals. Changes apply on next bot restart."
-            action={
-              <div className="flex items-center gap-2 flex-wrap justify-end">
-                {(isCustomSystemPrompt || isCustomCorrectionPrompt) && (
-                  <Badge variant="warning">Customized</Badge>
-                )}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleResetPrompts}
-                  disabled={!isCustomSystemPrompt && !isCustomCorrectionPrompt}
+        <Tabs defaultValue="mt5" className="space-y-4">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+            <TabsList className="flex w-full max-w-full overflow-x-auto rounded-xl xl:w-auto">
+              {configSections.map((section) => (
+                <TabsTrigger
+                  key={section.id}
+                  value={section.id}
+                  className="flex shrink-0 items-center gap-2"
                 >
-                  <RotateCcw className="w-4 h-4" />
-                  <span className="ml-1">Reset</span>
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={handleSavePrompts}
-                  disabled={promptsSaving}
-                >
-                  {promptsSaving ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : promptsSaveStatus === "success" ? (
-                    <Check className="w-4 h-4 text-success" />
-                  ) : promptsSaveStatus === "error" ? (
-                    <AlertCircle className="w-4 h-4 text-danger" />
-                  ) : (
-                    <Save className="w-4 h-4" />
-                  )}
-                  <span className="ml-1">Save prompts</span>
-                </Button>
-              </div>
-            }
-          />
-          <PanelBody className="space-y-6">
-            <Textarea
-              label="Signal Parsing Prompt"
-              value={systemPrompt}
-              onChange={(e) => {
-                setSystemPrompt(e.target.value);
-                setPromptsSaveStatus("idle");
-              }}
-              rows={20}
-              placeholder="Enter the system prompt for signal parsing..."
-            />
-            <Textarea
-              label="Correction Parsing Prompt"
-              value={correctionPrompt}
-              onChange={(e) => {
-                setCorrectionPrompt(e.target.value);
-                setPromptsSaveStatus("idle");
-              }}
-              rows={12}
-              placeholder="Enter the system prompt for correction parsing..."
-            />
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-warning/5 border border-warning/20">
-              <AlertCircle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
-              <p className="text-xs text-text-muted">
-                The correction prompt uses template placeholders like{" "}
-                <code className="text-text-secondary">{"{original_entry}"}</code>,{" "}
-                <code className="text-text-secondary">{"{original_sl}"}</code>,{" "}
-                <code className="text-text-secondary">{"{original_tps}"}</code>,{" "}
-                <code className="text-text-secondary">{"{symbol}"}</code>, and{" "}
-                <code className="text-text-secondary">{"{order_type}"}</code>.
-                Make sure to preserve these when editing.
-              </p>
-            </div>
-          </PanelBody>
-        </SectionPanel>
+                  {section.icon}
+                  <span>{section.title === "MetaTrader 5" ? "MetaTrader" : section.title}</span>
+                </TabsTrigger>
+              ))}
+              <TabsTrigger value="prompts" className="flex shrink-0 items-center gap-2">
+                <Brain className="w-5 h-5" />
+                <span>Prompts</span>
+              </TabsTrigger>
+            </TabsList>
+
+            {currentPreset && (
+              <Badge variant="default" className="w-fit bg-accent/20 text-accent border-accent/30">
+                {currentPreset}
+              </Badge>
+            )}
+          </div>
+
+          {configSections.map(renderConfigSection)}
+
+          <TabsContent value="prompts">
+            <SectionPanel>
+              <PanelHeader
+                eyebrow="LLM"
+                title="Prompts"
+                action={
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {(isCustomSystemPrompt || isCustomCorrectionPrompt) && (
+                      <Badge variant="warning">Customized</Badge>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleResetPrompts}
+                      disabled={!isCustomSystemPrompt && !isCustomCorrectionPrompt}
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span className="ml-1">Reset</span>
+                    </Button>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleSavePrompts}
+                      disabled={promptsSaving}
+                    >
+                      {promptsSaving ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : promptsSaveStatus === "success" ? (
+                        <Check className="w-4 h-4 text-success" />
+                      ) : promptsSaveStatus === "error" ? (
+                        <AlertCircle className="w-4 h-4 text-danger" />
+                      ) : (
+                        <Save className="w-4 h-4" />
+                      )}
+                      <span className="ml-1">Save prompts</span>
+                    </Button>
+                  </div>
+                }
+              />
+              <PanelBody className="space-y-5">
+                <Textarea
+                  label="Signal Parsing"
+                  value={systemPrompt}
+                  onChange={(e) => {
+                    setSystemPrompt(e.target.value);
+                    setPromptsSaveStatus("idle");
+                  }}
+                  rows={18}
+                  placeholder="Signal parsing prompt"
+                />
+                <Textarea
+                  label="Correction Parsing"
+                  value={correctionPrompt}
+                  onChange={(e) => {
+                    setCorrectionPrompt(e.target.value);
+                    setPromptsSaveStatus("idle");
+                  }}
+                  rows={10}
+                  placeholder="Correction parsing prompt"
+                />
+                <div className="flex items-center gap-2 rounded-xl border border-warning/20 bg-warning/5 px-3 py-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-warning" />
+                  <p className="text-xs text-text-muted">Keep template placeholders intact.</p>
+                </div>
+              </PanelBody>
+            </SectionPanel>
+          </TabsContent>
+        </Tabs>
       </AnimatedSection>
 
       {/* Save As Preset Dialog */}
