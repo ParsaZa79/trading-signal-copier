@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   PageHeader,
   PageLoading,
@@ -53,6 +54,7 @@ import {
 const IS_MACOS = typeof window !== "undefined" && navigator.platform.includes("Mac");
 
 interface ConfigSection {
+  id: string;
   title: string;
   icon: React.ReactNode;
   color: string;
@@ -110,6 +112,7 @@ export default function ConfigPage() {
 
   const configSections: ConfigSection[] = [
     {
+      id: "mt5",
       title: "MetaTrader 5",
       icon: <Server className="w-5 h-5" />,
       color: "success",
@@ -132,6 +135,7 @@ export default function ConfigPage() {
       ],
     },
     {
+      id: "trading",
       title: "Trading",
       icon: <TrendingUp className="w-5 h-5" />,
       color: "accent",
@@ -153,6 +157,7 @@ export default function ConfigPage() {
       ],
     },
     {
+      id: "inference",
       title: "Inference",
       icon: <Brain className="w-5 h-5" />,
       color: "warning",
@@ -171,6 +176,7 @@ export default function ConfigPage() {
       ],
     },
     {
+      id: "optional",
       title: "Optional",
       icon: <Settings2 className="w-5 h-5" />,
       color: "muted",
@@ -418,6 +424,112 @@ export default function ConfigPage() {
   };
 
   const isSecretConfigured = (key: string) => configuredSecrets.includes(key);
+
+  const renderField = (field: ConfigSection["fields"][number]) => {
+    if (field.condition && !field.condition()) return null;
+
+    const isBrokerField = field.key === "MT5_SERVER";
+    const wrapperClass = isBrokerField ? "md:col-span-2 xl:col-span-3" : undefined;
+
+    if (field.type === "select") {
+      return (
+        <div key={field.key} className={wrapperClass}>
+          <div className="space-y-4">
+            <Select
+              label={field.label}
+              value={isBrokerField ? selectedBrokerServer : config[field.key] || ""}
+              onChange={(e) =>
+                isBrokerField
+                  ? handleBrokerServerChange(e.target.value)
+                  : handleFieldChange(field.key, e.target.value)
+              }
+              options={field.options || []}
+              placeholder={field.placeholder}
+            />
+            {isBrokerField && useCustomBrokerServer && (
+              <Input
+                label="Server name"
+                value={config.MT5_SERVER || ""}
+                onChange={(e) => handleFieldChange("MT5_SERVER", e.target.value)}
+                placeholder="Exact MT5 server"
+              />
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div key={field.key} className={wrapperClass}>
+        <Input
+          label={field.label}
+          type={field.type}
+          value={config[field.key] || ""}
+          onChange={(e) => handleFieldChange(field.key, e.target.value)}
+          placeholder={
+            field.type === "password" && isSecretConfigured(field.key)
+              ? "Configured"
+              : field.placeholder
+          }
+        />
+      </div>
+    );
+  };
+
+  const renderConfigSection = (section: ConfigSection) => {
+    const colors = colorStyles[section.color];
+
+    return (
+      <TabsContent key={section.id} value={section.id}>
+        <SectionPanel>
+          <PanelHeader
+            eyebrow={section.title}
+            title={section.title}
+            action={<span className={colors.text}>{section.icon}</span>}
+          />
+          <PanelBody>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {section.fields.map(renderField)}
+            </div>
+            {section.id === "mt5" && (
+              <div className="mt-5 border-t border-border-subtle pt-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm font-medium text-text-primary">Runtime connection</p>
+                  <Button
+                    variant="secondary"
+                    onClick={handleConnectMt5}
+                    disabled={mt5ConnectStatus === "connecting"}
+                  >
+                    {mt5ConnectStatus === "connecting" ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : mt5ConnectStatus === "success" ? (
+                      <Check className="w-4 h-4 text-success" />
+                    ) : mt5ConnectStatus === "error" ? (
+                      <AlertCircle className="w-4 h-4 text-danger" />
+                    ) : (
+                      <Server className="w-4 h-4" />
+                    )}
+                    <span>Save & Connect</span>
+                  </Button>
+                </div>
+                {mt5ConnectMessage && (
+                  <div
+                    className={`mt-3 rounded-xl border px-4 py-3 text-xs ${
+                      mt5ConnectStatus === "success"
+                        ? "border-success/20 bg-success/10 text-success"
+                        : "border-danger/20 bg-danger/10 text-danger"
+                    }`}
+                  >
+                    {mt5ConnectMessage}
+                  </div>
+                )}
+              </div>
+            )}
+          </PanelBody>
+        </SectionPanel>
+      </TabsContent>
+    );
+  };
 
   if (isLoading) {
     return (
