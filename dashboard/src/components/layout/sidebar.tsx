@@ -14,10 +14,16 @@ import {
   Sliders,
   BarChart3,
   ShieldCheck,
+  Network,
+  Repeat2,
+  Shield,
 } from "lucide-react";
 
 const navItems = [
   { href: "/", label: "Overview", icon: LayoutDashboard },
+  { href: "/platform", label: "Platform", icon: Network },
+  { href: "/copy-trading", label: "Copy", icon: Repeat2 },
+  { href: "/risk", label: "Risk", icon: Shield },
   { href: "/bot", label: "Bot", icon: Bot },
   { href: "/config", label: "Config", icon: Sliders },
   { href: "/positions", label: "Positions", icon: Activity },

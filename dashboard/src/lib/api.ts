@@ -16,6 +16,13 @@ import type {
   PendingOrder,
   TradeHistoryEntry,
   MT5ConnectResponse,
+  PlatformOverview,
+  PlatformProvider,
+  PlatformRiskPolicy,
+  PlatformSubscription,
+  PlatformTradeEvent,
+  PlatformExecution,
+  PlatformStressResult,
 } from "@/types";
 
 function toBrokerSymbol(symbol: string): string {
@@ -599,5 +606,109 @@ export async function saveSystemPrompts(prompts: {
 export async function resetSystemPrompts(): Promise<{ success: boolean }> {
   return fetchApi("/api/prompts", {
     method: "DELETE",
+  });
+}
+
+// Platform / copy-trading
+export async function getPlatformOverview(): Promise<PlatformOverview> {
+  return fetchApi("/api/platform/overview");
+}
+
+export async function getPlatformProviders(): Promise<{
+  success: boolean;
+  providers: PlatformProvider[];
+}> {
+  return fetchApi("/api/platform/providers");
+}
+
+export async function createPlatformProvider(input: {
+  name: string;
+  source_type: string;
+  description?: string;
+  visibility?: "public" | "private";
+}): Promise<{ success: boolean; provider: PlatformProvider }> {
+  return fetchApi("/api/platform/providers", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getPlatformRiskPolicy(): Promise<{
+  success: boolean;
+  risk_policy: PlatformRiskPolicy;
+}> {
+  return fetchApi("/api/platform/risk-policy");
+}
+
+export async function savePlatformRiskPolicy(input: Partial<PlatformRiskPolicy>): Promise<{
+  success: boolean;
+  risk_policy: PlatformRiskPolicy;
+}> {
+  return fetchApi("/api/platform/risk-policy", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function getPlatformSubscriptions(): Promise<{
+  success: boolean;
+  subscriptions: PlatformSubscription[];
+}> {
+  return fetchApi("/api/platform/subscriptions");
+}
+
+export async function createPlatformSubscription(input: {
+  provider_id: string;
+  copy_mode: "fixed_lot" | "multiplier" | "mirror";
+  fixed_lot?: number;
+  multiplier?: number;
+  paper_trading?: boolean;
+}): Promise<{ success: boolean; subscription: PlatformSubscription }> {
+  return fetchApi("/api/platform/subscriptions", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function createPlatformTradeEvent(input: {
+  provider_id: string;
+  action: "open" | "modify" | "close" | "partial_close";
+  symbol: string;
+  side?: "buy" | "sell";
+  entry_price?: number;
+  stop_loss?: number;
+  take_profits?: number[];
+  volume?: number;
+  source?: string;
+}): Promise<{ success: boolean; event: PlatformTradeEvent }> {
+  return fetchApi("/api/platform/trade-events", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export async function processPlatformTradeEvent(eventId: string): Promise<{
+  success: boolean;
+  result: { created: number; blocked: number; skipped: number; results: Array<Record<string, unknown>> };
+}> {
+  return fetchApi(`/api/platform/trade-events/${encodeURIComponent(eventId)}/process`, {
+    method: "POST",
+  });
+}
+
+export async function getPlatformExecutions(): Promise<{
+  success: boolean;
+  executions: PlatformExecution[];
+}> {
+  return fetchApi("/api/platform/executions");
+}
+
+export async function runPlatformStressTest(input: {
+  provider_id: string;
+  count: number;
+}): Promise<{ success: boolean; result: PlatformStressResult }> {
+  return fetchApi("/api/platform/stress-test", {
+    method: "POST",
+    body: JSON.stringify(input),
   });
 }

@@ -56,6 +56,7 @@ from .routers import (
     health,
     mt5,
     orders,
+    platform,
     positions,
     prompts,
     symbols,
@@ -147,6 +148,7 @@ app.include_router(bot.router, prefix="/api/bot", tags=["Bot"], dependencies=pro
 app.include_router(config_router.router, prefix="/api/config", tags=["Config"], dependencies=protected)
 app.include_router(prompts.router, prefix="/api/prompts", tags=["Prompts"], dependencies=protected)
 app.include_router(analysis.router, prefix="/api/analysis", tags=["Analysis"], dependencies=protected)
+app.include_router(platform.router, prefix="/api/platform", tags=["Platform"], dependencies=protected)
 
 
 @app.get("/")

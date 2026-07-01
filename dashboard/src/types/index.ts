@@ -187,3 +187,111 @@ export interface TrackedPosition {
   status: "open" | "closed" | "pending_completion";
   opened_at: string;
 }
+
+// Platform / copy-trading types
+export type PlatformSourceType = "manual" | "telegram" | "webhook" | "mt5_mirror" | string;
+export type PlatformCopyMode = "fixed_lot" | "multiplier" | "mirror";
+export type PlatformTradeAction = "open" | "modify" | "close" | "partial_close";
+export type PlatformTradeSide = "buy" | "sell";
+
+export interface PlatformProvider {
+  id: string;
+  owner_user_id: string;
+  name: string;
+  source_type: PlatformSourceType;
+  description: string;
+  visibility: "public" | "private";
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlatformRiskPolicy {
+  user_id: string;
+  paper_trading: boolean;
+  require_stop_loss: boolean;
+  allowed_symbols: string[];
+  max_daily_loss: number | null;
+  max_open_trades: number;
+  default_fixed_lot: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface PlatformSubscription {
+  id: string;
+  provider_id: string;
+  provider_name?: string;
+  follower_user_id: string;
+  copy_mode: PlatformCopyMode;
+  fixed_lot: number;
+  multiplier: number;
+  paper_trading: boolean;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlatformTradeEvent {
+  id: string;
+  provider_id: string;
+  provider_name?: string;
+  owner_user_id: string;
+  action: PlatformTradeAction;
+  symbol: string;
+  side: PlatformTradeSide | null;
+  entry_price: number | null;
+  stop_loss: number | null;
+  take_profits: number[];
+  volume: number | null;
+  source: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlatformExecution {
+  id: string;
+  event_id: string;
+  subscription_id: string;
+  provider_id: string;
+  provider_name?: string;
+  follower_user_id: string;
+  action: PlatformTradeAction;
+  symbol: string;
+  side: PlatformTradeSide | null;
+  entry_price: number | null;
+  stop_loss: number | null;
+  take_profits: number[];
+  volume: number;
+  mode: "paper" | "live_pending";
+  status: "accepted" | "blocked";
+  blocked_reason: string | null;
+  realized_pnl: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlatformOverview {
+  providers: PlatformProvider[];
+  subscriptions: PlatformSubscription[];
+  risk_policy: PlatformRiskPolicy;
+  recent_events: PlatformTradeEvent[];
+  recent_executions: PlatformExecution[];
+  metrics: {
+    provider_count: number;
+    available_provider_count: number;
+    subscription_count: number;
+    paper_execution_count: number;
+    blocked_execution_count: number;
+  };
+}
+
+export interface PlatformStressResult {
+  events: number;
+  event_ids: string[];
+  executions_created: number;
+  blocked: number;
+  skipped: number;
+  duration_ms: number;
+}

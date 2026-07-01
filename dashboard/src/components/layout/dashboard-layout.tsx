@@ -300,7 +300,10 @@ function AuthenticatedDashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const isSetupRoute = pathname.startsWith("/setup");
+  const isPlatformRoute =
+    pathname.startsWith("/platform") || pathname.startsWith("/copy-trading") || pathname.startsWith("/risk");
   const needsSetup = !session.setupComplete;
+  const shouldForceSetup = needsSetup && !isSetupRoute && !isPlatformRoute;
   const { positions, account, isConnected, error, reconnect } = useWebSocket({
     enabled: session.setupComplete && Boolean(session.activeAccountId),
     token: session.token,
@@ -323,12 +326,12 @@ function AuthenticatedDashboardLayout({
   const mt5Connected = isConnected && account !== null;
 
   useEffect(() => {
-    if (needsSetup && !isSetupRoute) {
+    if (shouldForceSetup) {
       router.replace("/setup");
     } else if (!needsSetup && isSetupRoute) {
       router.replace("/");
     }
-  }, [isSetupRoute, needsSetup, router]);
+  }, [isSetupRoute, needsSetup, router, shouldForceSetup]);
 
   const fetchHeaderPrices = useCallback(async () => {
     if (!account) {
@@ -418,7 +421,7 @@ function AuthenticatedDashboardLayout({
     window.location.reload();
   };
 
-  if (needsSetup && !isSetupRoute) {
+  if (shouldForceSetup) {
     return (
       <main className="min-h-screen bg-bg-primary flex items-center justify-center">
         <p className="text-sm text-text-muted">Opening account setup...</p>
