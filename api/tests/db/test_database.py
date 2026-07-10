@@ -206,9 +206,10 @@ def test_alembic_version_table_is_explicitly_public(monkeypatch: pytest.MonkeyPa
 def test_initial_migration_only_manages_app_schema(monkeypatch: pytest.MonkeyPatch) -> None:
     alembic_config = AlembicConfig(API_ROOT / "alembic.ini")
     scripts = ScriptDirectory.from_config(alembic_config)
-    revision = scripts.get_revision("head")
+    revision = scripts.get_revision("0001_app_schema")
     assert revision is not None
     assert revision.revision == "0001_app_schema"
+    assert revision.down_revision is None
 
     statements: list[object] = []
     monkeypatch.setattr(revision.module.op, "execute", statements.append)
@@ -245,6 +246,66 @@ def test_postgresql_migration_up_and_down(monkeypatch: pytest.MonkeyPatch) -> No
         command.downgrade(alembic_config, "base")
 
     assert asyncio.run(_schema_exists(database_url)) is False
+
+
+@pytest.mark.integration
+async def test_postgresql_actor_deletion_preserves_audit_identity(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    database_url = _test_database_url()
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    alembic_config = AlembicConfig(API_ROOT / "alembic.ini")
+    assert await _schema_exists(database_url) is False, (
+        "TEST_DATABASE_URL must point to a disposable database without the app schema"
+    )
+
+    engine = None
+    try:
+        await asyncio.to_thread(command.upgrade, alembic_config, "head")
+        engine = db_session.create_database_engine(database_url)
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "INSERT INTO app.app_user_profiles (auth_subject, email) "
+                    "VALUES (:actor_user_id, :email)"
+                ),
+                {"actor_user_id": "deleted-actor", "email": "deleted@example.test"},
+            )
+            await connection.execute(
+                text(
+                    "INSERT INTO app.audit_events "
+                    "(id, actor_user_id, action, target_type, target_id) "
+                    "VALUES (:id, :actor_user_id, :action, :target_type, :target_id)"
+                ),
+                {
+                    "id": "00000000-0000-0000-0000-000000000001",
+                    "actor_user_id": "deleted-actor",
+                    "action": "user.deleted",
+                    "target_type": "user",
+                    "target_id": "deleted-actor",
+                },
+            )
+            await connection.execute(
+                text(
+                    "DELETE FROM app.app_user_profiles "
+                    "WHERE auth_subject = :actor_user_id"
+                ),
+                {"actor_user_id": "deleted-actor"},
+            )
+
+        async with engine.connect() as connection:
+            actor_user_id = await connection.scalar(
+                text(
+                    "SELECT actor_user_id FROM app.audit_events "
+                    "WHERE id = :id"
+                ),
+                {"id": "00000000-0000-0000-0000-000000000001"},
+            )
+        assert actor_user_id == "deleted-actor"
+    finally:
+        if engine is not None:
+            await db_session.dispose_database_engine(engine)
+        await asyncio.to_thread(command.downgrade, alembic_config, "base")
 
 
 @pytest.mark.integration

@@ -8,10 +8,12 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
+from src import models
 from src.db.base import Base, include_app_schema_name
 from src.db.session import normalize_database_url
 
 config = context.config
+assert models.UserProfile.metadata is Base.metadata
 target_metadata = Base.metadata
 
 
