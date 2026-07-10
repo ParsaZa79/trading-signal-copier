@@ -2,23 +2,14 @@
 
 from __future__ import annotations
 
-import re
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Literal, Self, final
 
-from pydantic import Field, StringConstraints, TypeAdapter, field_validator, model_validator
+from pydantic import Field, TypeAdapter, field_validator, model_validator
 
 from trading_strategy_sdk._model import ContractModel, Identifier, OpaqueId, as_utc
-
-_UNREDACTED_ASSIGNMENT = re.compile(
-    r"(?i)(?:password|secret|token|credential|authorization|cookie|api[_-]?key)\s*[:=]"
-)
-RedactedReason = Annotated[
-    str,
-    StringConstraints(strip_whitespace=True, min_length=1, max_length=500),
-]
 
 
 class LifecycleOperation(StrEnum):
@@ -42,6 +33,16 @@ class LifecycleStatus(StrEnum):
     SUCCEEDED = "succeeded"
     REJECTED = "rejected"
     FAILED = "failed"
+
+
+class LifecycleReasonCode(StrEnum):
+    """Closed platform-authored reason vocabulary for unsuccessful operations."""
+
+    BROKER_REJECTED_REQUEST = "broker_rejected_request"
+    PLATFORM_FAILURE = "platform_failure"
+
+
+_LIFECYCLE_REASON_VALUES = frozenset(LifecycleReasonCode)
 
 
 class _LifecycleResult(ContractModel):
@@ -158,15 +159,13 @@ class _UnsuccessfulLifecycleResult(_LifecycleResult):
     opposite_position_id: OpaqueId | None = None
     oco_group_id: OpaqueId | None = None
     managed_exit_plan_id: OpaqueId | None = None
-    reason: RedactedReason
+    reason: LifecycleReasonCode
 
-    @field_validator("reason")
+    @field_validator("reason", mode="before")
     @classmethod
-    def reason_is_redacted(cls, value: str) -> str:
-        if _UNREDACTED_ASSIGNMENT.search(value) is not None or any(
-            ord(character) < 32 for character in value
-        ):
-            raise ValueError("lifecycle reason must be a bounded redacted summary")
+    def reason_is_platform_authored(cls, value: object) -> object:
+        if not isinstance(value, str) or value not in _LIFECYCLE_REASON_VALUES:
+            raise ValueError("lifecycle reason must be a closed redacted platform reason code")
         return value
 
     @model_validator(mode="after")

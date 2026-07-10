@@ -112,3 +112,25 @@ def test_lifecycle_failure_target_ids_must_match_the_operation() -> None:
             created_at=NOW,
             reason="platform_failure",
         )
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.payload.signature",
+        "Basic dXNlcjpwYXNzd29yZA==",
+        "session_cookie abcdef0123456789abcdef0123456789",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signature",
+        "https://broker-user:broker-password@example.com/orders",
+        "arbitrary_broker_message",
+    ],
+)
+def test_lifecycle_reasons_reject_non_assignment_credentials(reason: str) -> None:
+    with pytest.raises(ValidationError, match="reason"):
+        sdk.FailedLifecycleResult(
+            intent_id="modify",
+            operation=sdk.LifecycleOperation.MODIFY_ORDER,
+            order_id="order_1",
+            created_at=NOW,
+            reason=reason,
+        )

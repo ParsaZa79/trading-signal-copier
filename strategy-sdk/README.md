@@ -35,15 +35,16 @@ policy.
   prices use the corresponding stop boundary; equality is valid.
 - Every immutable SDK contract exposes `canonical_bytes()` and `sha256_digest()`. The module-level
   `canonical_bytes(contract)` and `sha256_digest(contract)` APIs are equivalent. Canonical JSON is
-  compact UTF-8 with lexically sorted object keys and a lowercase `sha256:<hex>` identity.
+  compact UTF-8 with lexically sorted object keys, canonical finite Decimal spellings (including
+  normalized trailing zeros and signed zero), and a lowercase `sha256:<hex>` identity.
   Semantically unordered spec collections (subscriptions, warmup, triggers, parameters,
   dependencies, capabilities, order types, filling policies, and dependency hashes) are
   normalized. Entry rules, exit rules, and disclosures retain their declared order because their
   evaluation/presentation order is contract-significant.
 - `LifecycleResult` is a closed discriminated union for order modification/removal, protection,
   full and partial close, close-by, OCO modification/cancellation, and managed-exit
-  modification/clearing. Rejected and failed variants carry only bounded, redacted summaries and
-  operation-correct target IDs; they never carry broker payloads or resolved volume.
+  modification/clearing. Rejected and failed variants carry only closed, platform-authored reason
+  codes and operation-correct target IDs; they never carry broker payloads or resolved volume.
 
 `DependencySpec` represents the resolved, immutable dependency record (canonical PEP 440 version
 and SHA-256 artifact hashes), not the user's unresolved package request.

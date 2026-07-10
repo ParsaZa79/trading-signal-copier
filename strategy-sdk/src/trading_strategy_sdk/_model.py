@@ -379,10 +379,44 @@ class ContractModel(BaseModel):
         return sha256_digest(self)
 
 
+def _canonical_decimal(value: Decimal) -> str:
+    """Render a finite decimal without insignificant zeros or signed zero."""
+    if not value.is_finite():
+        raise ValueError("canonical contract decimals must be finite")
+    if value.is_zero():
+        return "0"
+    rendered = format(value, "f")
+    if "." in rendered:
+        rendered = rendered.rstrip("0").rstrip(".")
+    return rendered
+
+
+def _normalize_canonical_decimals(python_value: object, json_value: Any) -> Any:
+    """Replace JSON-mode Decimal strings with their canonical numeric spelling."""
+    if isinstance(python_value, Decimal):
+        return _canonical_decimal(python_value)
+    if type(python_value) is dict and type(json_value) is dict:
+        python_mapping = cast(dict[str, object], python_value)
+        json_mapping = cast(dict[str, Any], json_value)
+        return {
+            key: _normalize_canonical_decimals(python_mapping[key], item)
+            for key, item in json_mapping.items()
+        }
+    if isinstance(python_value, (list, tuple)) and isinstance(json_value, list):
+        python_items = cast(Collection[object], python_value)
+        json_items = cast(list[object], json_value)
+        return [
+            _normalize_canonical_decimals(source, encoded)
+            for source, encoded in zip(python_items, json_items, strict=True)
+        ]
+    return json_value
+
+
 def canonical_bytes(value: ContractModel) -> bytes:
     """Encode an immutable SDK contract as compact, key-sorted UTF-8 JSON."""
     validated = value.__class__.model_validate(value)
-    payload = validated.model_dump(mode="json")
+    python_payload = validated.model_dump(mode="python")
+    payload = _normalize_canonical_decimals(python_payload, validated.model_dump(mode="json"))
     encoded = json.dumps(
         payload,
         ensure_ascii=False,

@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Callable
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
 
-from trading_strategy_sdk.orders import OrderFilling, OrderType
+from trading_strategy_sdk.orders import BreakEven, OrderFilling, OrderType
 from trading_strategy_sdk.positions import PositionMode
 from trading_strategy_sdk.spec import (
     BarSubscription,
@@ -245,6 +246,24 @@ def test_strategy_spec_exposes_canonical_bytes_and_prefixed_sha256_identity() ->
     assert canonical == spec.canonical_bytes()
     assert digest == f"sha256:{hashlib.sha256(canonical).hexdigest()}"
     assert digest == spec.sha256_digest()
+
+
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        (Decimal("1"), Decimal("1.0000")),
+        (Decimal("123.4500"), Decimal("123.45")),
+        (Decimal("0"), Decimal("-0.000")),
+    ],
+)
+def test_canonical_identity_normalizes_numeric_decimal_equivalents(
+    left: Decimal, right: Decimal
+) -> None:
+    first = BreakEven(trigger_price=Decimal("2"), offset=left)
+    second = BreakEven(trigger_price=Decimal("2.000"), offset=right)
+
+    assert first.canonical_bytes() == second.canonical_bytes()
+    assert first.sha256_digest() == second.sha256_digest()
 
 
 def test_canonical_identity_revalidates_constructed_artifacts() -> None:
