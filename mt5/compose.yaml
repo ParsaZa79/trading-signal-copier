@@ -1,8 +1,5 @@
 services:
   mt5:
-    build:
-      context: ..
-      dockerfile: mt5/Dockerfile
     image: trading-platform/mt5-rpyc:6.0.2
     restart: unless-stopped
     environment:

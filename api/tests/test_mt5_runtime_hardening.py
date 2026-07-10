@@ -74,6 +74,7 @@ def test_effective_production_network_is_dedicated_and_rpyc_is_not_published() -
     service = config["services"]["mt5"]
 
     assert service["image"] == IMAGE
+    assert "build" not in service
     assert set(service["networks"]) == {NETWORK}
     assert all(port["target"] != 8001 for port in service.get("ports", []))
     assert config["networks"][NETWORK]["name"] == NETWORK
