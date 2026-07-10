@@ -1,0 +1,46 @@
+[project]
+name = "trading-strategy-sdk"
+version = "0.1.0"
+description = "Typed strategy contracts for the Trading Platform"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+    "packaging>=24,<27",
+    "pydantic>=2.11,<3",
+]
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.400,<2",
+    "pytest>=8.3,<9",
+    "ruff>=0.11,<1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/trading_strategy_sdk"]
+
+[tool.pytest.ini_options]
+addopts = ["--strict-config", "--strict-markers"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["B", "C4", "E", "F", "I", "PT", "RUF", "SIM", "UP"]
+
+[tool.ruff.format]
+docstring-code-format = true
+quote-style = "double"
+
+[tool.pyright]
+include = ["src"]
+pythonVersion = "3.12"
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
