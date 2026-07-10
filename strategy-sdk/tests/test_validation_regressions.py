@@ -529,7 +529,6 @@ def test_timezone_callback_exceptions_are_wrapped_without_input_leaks(
             position_id="evil_timezone",
             symbol=Symbol.EURUSD,
             side=PositionSide.BUY,
-            volume=Decimal("1"),
             average_price=Decimal("1"),
             opened_at=malicious_time,
         )
@@ -559,7 +558,6 @@ def test_extreme_timezone_normalization_errors_are_wrapped_by_pydantic() -> None
             position_id="extreme",
             symbol=Symbol.EURUSD,
             side=PositionSide.BUY,
-            volume=Decimal("1"),
             average_price=Decimal("1"),
             opened_at=overflowing,
         )

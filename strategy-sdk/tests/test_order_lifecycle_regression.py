@@ -87,7 +87,6 @@ def _position(
         position_id=position_id,
         symbol=sdk.Symbol.EURUSD,
         side=sdk.PositionSide.BUY,
-        volume=Decimal("0.10"),
         average_price=Decimal("1.1000"),
         opened_at=EVENT_TIME - timedelta(minutes=5),
         stop_loss=stop_loss,
@@ -102,6 +101,7 @@ def _context(
     oco_groups: tuple[object, ...] = (),
     managed_exit_plans: tuple[object, ...] = (),
     placement_results: tuple[object, ...] = (),
+    lifecycle_results: tuple[object, ...] = (),
 ) -> sdk.StrategyContext:
     bars = tuple(_bar(subscription) for subscription in spec.subscriptions)
     return sdk.StrategyContext.model_validate(
@@ -120,6 +120,7 @@ def _context(
             "oco_groups": oco_groups,
             "managed_exit_plans": managed_exit_plans,
             "placement_results": placement_results,
+            "lifecycle_results": lifecycle_results,
             "state": sdk.StrategyState.empty(),
         }
     )
@@ -288,6 +289,11 @@ def test_context_accepts_canonical_pending_oco_plan_and_result_snapshots() -> No
         ),
         created_at=EVENT_TIME - timedelta(minutes=1),
     )
+    lifecycle_result = sdk.OrderModifiedResult(
+        intent_id="modify_intent",
+        order_id="order_long",
+        created_at=EVENT_TIME - timedelta(seconds=30),
+    )
 
     context = _context(
         spec,
@@ -296,6 +302,7 @@ def test_context_accepts_canonical_pending_oco_plan_and_result_snapshots() -> No
         oco_groups=(group,),
         managed_exit_plans=(plan,),
         placement_results=(result,),
+        lifecycle_results=(lifecycle_result,),
     )
 
     assert tuple(order.order_id for order in context.pending_orders) == (
@@ -305,12 +312,19 @@ def test_context_accepts_canonical_pending_oco_plan_and_result_snapshots() -> No
     assert context.oco_groups == (group,)
     assert context.managed_exit_plans == (plan,)
     assert context.placement_results == (result,)
+    assert context.lifecycle_results == (lifecycle_result,)
     assert sdk.StrategyContext.model_validate_json(context.model_dump_json()) == context
 
 
 @pytest.mark.parametrize(
     "snapshot_field",
-    ["pending_orders", "oco_groups", "managed_exit_plans", "placement_results"],
+    [
+        "pending_orders",
+        "oco_groups",
+        "managed_exit_plans",
+        "placement_results",
+        "lifecycle_results",
+    ],
 )
 def test_context_rejects_future_lifecycle_snapshots(snapshot_field: str) -> None:
     spec = _spec()
@@ -320,10 +334,18 @@ def test_context_rejects_future_lifecycle_snapshots(snapshot_field: str) -> None
         value = (_oco_snapshot(created_at=EVENT_TIME + timedelta(seconds=1)),)
     elif snapshot_field == "managed_exit_plans":
         value = (_managed_plan_snapshot(created_at=EVENT_TIME + timedelta(seconds=1)),)
-    else:
+    elif snapshot_field == "placement_results":
         value = (
             sdk.OrderPlacementResult(
                 intent_id="future_result",
+                order_id="order_1",
+                created_at=EVENT_TIME + timedelta(seconds=1),
+            ),
+        )
+    else:
+        value = (
+            sdk.OrderCancelledResult(
+                intent_id="future_cancel",
                 order_id="order_1",
                 created_at=EVENT_TIME + timedelta(seconds=1),
             ),

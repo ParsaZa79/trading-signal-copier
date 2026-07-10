@@ -25,6 +25,7 @@ from trading_strategy_sdk.orders import (
     validate_managed_exit_direction,
 )
 from trading_strategy_sdk.positions import PositionBook, PositionMode
+from trading_strategy_sdk.results import LifecycleResult
 from trading_strategy_sdk.spec import (
     SynchronizationMode,
     SynchronizationSpec,
@@ -94,6 +95,7 @@ class StrategyContext(_ContextModel):
     oco_groups: tuple[OcoGroupSnapshot, ...] = ()
     managed_exit_plans: tuple[ManagedExitPlanSnapshot, ...] = ()
     placement_results: tuple[OrderPlacementResult | OcoPlacementResult, ...] = ()
+    lifecycle_results: tuple[LifecycleResult, ...] = ()
     state: StrategyState
 
     @field_validator("histories")
@@ -133,6 +135,13 @@ class StrategyContext(_ContextModel):
     def order_placement_results(
         cls, values: tuple[OrderPlacementResult | OcoPlacementResult, ...]
     ) -> tuple[OrderPlacementResult | OcoPlacementResult, ...]:
+        return tuple(sorted(values, key=lambda item: (item.created_at, item.intent_id)))
+
+    @field_validator("lifecycle_results")
+    @classmethod
+    def order_lifecycle_results(
+        cls, values: tuple[LifecycleResult, ...]
+    ) -> tuple[LifecycleResult, ...]:
         return tuple(sorted(values, key=lambda item: (item.created_at, item.intent_id)))
 
     @model_validator(mode="after")
@@ -389,6 +398,12 @@ class StrategyContext(_ContextModel):
             issued_order_ids.update(order_ids)
             issued_plan_ids.update(plan_ids)
             issued_oco_ids.update(oco_ids)
+            result_ids.add(result.intent_id)
+        for result in self.lifecycle_results:
+            if result.intent_id in result_ids:
+                raise ValueError("lifecycle result intent_id values must be globally unique")
+            if result.created_at > boundary:
+                raise ValueError("lifecycle result is after the event bar close")
             result_ids.add(result.intent_id)
         return self
 

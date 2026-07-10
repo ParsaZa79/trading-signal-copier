@@ -17,7 +17,6 @@ def _position(position_id: str, side: PositionSide = PositionSide.BUY) -> Positi
         position_id=position_id,
         symbol=Symbol.EURUSD,
         side=side,
-        volume=Decimal("0.12"),
         average_price=Decimal("1.1000"),
         opened_at=datetime(2026, 7, 10, 12, 0, tzinfo=UTC),
         stop_loss=stop_loss,
@@ -60,12 +59,12 @@ def test_position_ids_are_unique_in_every_mode() -> None:
         PositionBook(mode=PositionMode.HEDGING, positions=(position, position))
 
 
-def test_position_snapshot_is_immutable_and_can_report_filled_volume() -> None:
+def test_position_snapshot_is_immutable_and_hides_filled_volume() -> None:
     position = _position("immutable")
 
-    assert position.volume == Decimal("0.12")
+    assert "volume" not in Position.model_fields
     with pytest.raises(ValidationError, match="frozen"):
-        position.volume = Decimal("5")  # type: ignore[misc]
+        position.average_price = Decimal("5")  # type: ignore[misc]
 
 
 def test_position_times_must_be_timezone_aware() -> None:
@@ -74,7 +73,6 @@ def test_position_times_must_be_timezone_aware() -> None:
             position_id="naive",
             symbol=Symbol.EURUSD,
             side=PositionSide.BUY,
-            volume=Decimal("0.1"),
             average_price=Decimal("1.1"),
             opened_at=datetime(2026, 7, 10, 12, 0),
         )

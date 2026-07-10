@@ -61,7 +61,6 @@ def _position(
         position_id=position_id,
         symbol=symbol,
         side=side,
-        volume=Decimal("0.10"),
         average_price=Decimal("1.1000"),
         opened_at=opened_at,
         stop_loss=Decimal("1.0900") if side is PositionSide.BUY else Decimal("1.1100"),

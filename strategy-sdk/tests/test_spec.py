@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 
@@ -232,6 +233,102 @@ def test_unordered_spec_fields_serialize_canonically() -> None:
     ]
     assert payload["order_types"] == [0, 7]
     assert payload["filling_policies"] == [2]
+
+
+def test_strategy_spec_exposes_canonical_bytes_and_prefixed_sha256_identity() -> None:
+    spec = _valid_spec()
+
+    canonical = spec.canonical_bytes()
+    digest = spec.sha256_digest()
+
+    assert canonical == canonical.strip()
+    assert canonical == spec.canonical_bytes()
+    assert digest == f"sha256:{hashlib.sha256(canonical).hexdigest()}"
+    assert digest == spec.sha256_digest()
+
+
+def test_canonical_identity_revalidates_constructed_artifacts() -> None:
+    valid = _valid_spec()
+    invalid = StrategySpec.model_construct(
+        **{
+            **valid.model_dump(round_trip=True),
+            "subscriptions": (valid.subscriptions[0], valid.subscriptions[0]),
+        }
+    )
+
+    with pytest.raises(ValidationError, match="unique"):
+        invalid.canonical_bytes()
+
+
+def test_canonical_identity_normalizes_unordered_spec_fields_but_preserves_rule_order() -> None:
+    original = _valid_spec()
+    reordered_unordered = _valid_spec(
+        subscriptions=tuple(reversed(original.subscriptions)),
+        warmup=tuple(reversed(original.warmup)),
+        triggers=tuple(reversed(original.triggers)),
+        parameters=tuple(reversed(original.parameters)),
+        dependencies=tuple(reversed(original.dependencies)),
+    )
+    reversed_entries = _valid_spec(
+        entries=(
+            RuleSpec(name="second", description="Second order-sensitive rule."),
+            RuleSpec(name="first", description="First order-sensitive rule."),
+        )
+    )
+    forward_entries = _valid_spec(entries=tuple(reversed(reversed_entries.entries)))
+
+    assert reordered_unordered.canonical_bytes() == original.canonical_bytes()
+    assert reordered_unordered.sha256_digest() == original.sha256_digest()
+    assert reversed_entries.canonical_bytes() != forward_entries.canonical_bytes()
+
+
+def test_other_immutable_contracts_share_the_documented_artifact_identity_api() -> None:
+    hashes = (f"sha256:{'a' * 64}", f"sha256:{'b' * 64}")
+    dependency = DependencySpec(name="numpy", version="2.2.1", hashes=hashes)
+    reordered = DependencySpec(name="numpy", version="2.2.1", hashes=tuple(reversed(hashes)))
+
+    assert dependency.canonical_bytes().startswith(b'{"hashes":')
+    assert dependency.sha256_digest().startswith("sha256:")
+    assert dependency.canonical_bytes() == reordered.canonical_bytes()
+    assert dependency.sha256_digest() == reordered.sha256_digest()
+
+
+def test_canonical_identity_normalizes_unordered_oco_legs_and_position_provenance() -> None:
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    import trading_strategy_sdk as sdk
+
+    legs = (
+        sdk.OcoLeg(
+            leg_id="long",
+            symbol=sdk.Symbol.EURUSD,
+            order_type=sdk.OrderType.BUY_STOP,
+            entry_price=Decimal("1.1050"),
+            stop_loss=Decimal("1.0950"),
+        ),
+        sdk.OcoLeg(
+            leg_id="short",
+            symbol=sdk.Symbol.EURUSD,
+            order_type=sdk.OrderType.SELL_STOP,
+            entry_price=Decimal("1.0950"),
+            stop_loss=Decimal("1.1050"),
+        ),
+    )
+    first_group = sdk.OcoGroup(group_id="breakout", legs=legs)
+    second_group = sdk.OcoGroup(group_id="breakout", legs=tuple(reversed(legs)))
+    first_position = sdk.Position(
+        position_id="position_1",
+        symbol=sdk.Symbol.EURUSD,
+        side=sdk.PositionSide.BUY,
+        average_price=Decimal("1.1000"),
+        opened_at=datetime(2026, 7, 10, tzinfo=UTC),
+        source_order_ids=("order_2", "order_1"),
+    )
+    second_position = first_position.model_copy(update={"source_order_ids": ("order_1", "order_2")})
+
+    assert first_group.sha256_digest() == second_group.sha256_digest()
+    assert first_position.sha256_digest() == second_position.sha256_digest()
 
 
 def test_close_by_requires_hedging_mode() -> None:

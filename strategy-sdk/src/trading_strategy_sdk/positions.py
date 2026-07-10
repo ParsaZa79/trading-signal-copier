@@ -11,7 +11,6 @@ from pydantic import field_validator, model_validator
 from trading_strategy_sdk._model import (
     ContractModel,
     OpaqueId,
-    PositiveDecimal,
     Price,
     as_utc,
 )
@@ -38,7 +37,6 @@ class Position(ContractModel):
     position_id: OpaqueId
     symbol: Symbol
     side: PositionSide
-    volume: PositiveDecimal
     average_price: Price
     opened_at: datetime
     stop_loss: Price | None = None
@@ -55,7 +53,7 @@ class Position(ContractModel):
     def source_order_ids_are_unique(cls, values: tuple[str, ...]) -> tuple[str, ...]:
         if len(set(values)) != len(values):
             raise ValueError("source_order_ids must be unique")
-        return values
+        return tuple(sorted(values))
 
 
 class PositionBook(ContractModel):

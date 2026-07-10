@@ -102,6 +102,28 @@ def _latest_protection_basis(
     return bar.bid.close if is_buy else bar.ask.close
 
 
+def _validate_pending_quote_boundary(
+    *,
+    order_type: OrderType,
+    trigger_price: Decimal,
+    context: StrategyContext,
+    symbol: Symbol,
+    label: str,
+) -> None:
+    """Validate pending placement against the side-correct visible Bid or Ask."""
+    current_quote = _latest_symbol_basis(context, symbol, is_buy=order_type.is_buy)
+    if order_type in {OrderType.BUY_LIMIT, OrderType.SELL_STOP, OrderType.SELL_STOP_LIMIT}:
+        if trigger_price > current_quote:
+            side = "Ask" if order_type.is_buy else "Bid"
+            raise ValueError(f"{label} must be at or below the current {side}")
+    elif (
+        order_type in {OrderType.SELL_LIMIT, OrderType.BUY_STOP, OrderType.BUY_STOP_LIMIT}
+        and trigger_price < current_quote
+    ):
+        side = "Ask" if order_type.is_buy else "Bid"
+        raise ValueError(f"{label} must be at or above the current {side}")
+
+
 def _required_managed_capabilities(managed_exit: ManagedExitPlan) -> set[Capability]:
     required: set[Capability] = set()
     if managed_exit.bracket is not None:
@@ -177,7 +199,7 @@ def _validate_managed_relationships(
     )
 
 
-def _validate_group(group: OcoGroup, spec: StrategySpec) -> None:
+def _validate_group(group: OcoGroup, spec: StrategySpec, context: StrategyContext) -> None:
     declared_symbols = set(spec.symbols)
     for leg in group.legs:
         if leg.symbol not in declared_symbols:
@@ -186,6 +208,13 @@ def _validate_group(group: OcoGroup, spec: StrategySpec) -> None:
             raise ValueError("OCO leg order type is not declared by the strategy spec")
         if leg.filling not in spec.filling_policies:
             raise ValueError("OCO leg filling is not declared by the strategy spec")
+        _validate_pending_quote_boundary(
+            order_type=leg.order_type,
+            trigger_price=leg.entry_price,
+            context=context,
+            symbol=leg.symbol,
+            label="OCO pending trigger",
+        )
         _validate_managed_capabilities(leg.managed_exit, spec)
         if leg.managed_exit is not None:
             basis = pending_order_basis(leg.order_type, leg.entry_price, leg.stop_limit_price)
@@ -416,6 +445,13 @@ class _ContextualOutput(ContractModel):
                         cast(Decimal, intent.entry_price),
                         intent.stop_limit_price,
                     )
+                    _validate_pending_quote_boundary(
+                        order_type=intent.order_type,
+                        trigger_price=cast(Decimal, intent.entry_price),
+                        context=context,
+                        symbol=intent.symbol,
+                        label="pending entry trigger",
+                    )
                     _validate_managed_relationships(
                         intent.managed_exit,
                         is_buy=intent.order_type.is_buy,
@@ -425,7 +461,7 @@ class _ContextualOutput(ContractModel):
             elif isinstance(intent, PlaceOcoIntent):
                 if Capability.PLATFORM_OCO not in spec.required_capabilities:
                     raise ValueError("OCO placement requires the PLATFORM_OCO capability")
-                _validate_group(intent.group, spec)
+                _validate_group(intent.group, spec, context)
             elif isinstance(intent, ModifyOrderIntent):
                 snapshot = _pending_by_id(context, intent.order_id)
                 if snapshot.order_type not in spec.order_types:
@@ -433,6 +469,13 @@ class _ContextualOutput(ContractModel):
                 if snapshot.filling not in spec.filling_policies:
                     raise ValueError("target order filling is not declared by the strategy spec")
                 modified = _revalidate_order_modification(intent, snapshot)
+                _validate_pending_quote_boundary(
+                    order_type=modified.order_type,
+                    trigger_price=modified.entry_price,
+                    context=context,
+                    symbol=modified.symbol,
+                    label="modified pending trigger",
+                )
                 if snapshot.managed_exit_plan_id is not None:
                     plan_snapshot = _plan_by_id(context, snapshot.managed_exit_plan_id)
                     managed_exit = plan_snapshot.managed_exit
@@ -555,7 +598,7 @@ class _ContextualOutput(ContractModel):
                     leg.leg_id for leg in snapshot.legs
                 }:
                     raise ValueError("replacement OCO group must preserve leg identities")
-                _validate_group(intent.group, spec)
+                _validate_group(intent.group, spec, context)
             elif isinstance(intent, CancelOcoIntent):
                 if Capability.PLATFORM_OCO not in spec.required_capabilities:
                     raise ValueError("OCO cancellation requires the PLATFORM_OCO capability")

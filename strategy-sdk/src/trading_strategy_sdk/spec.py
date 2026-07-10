@@ -265,6 +265,16 @@ class StrategySpec(_ContractModel):
     def order_warmup(cls, values: tuple[WarmupRequirement, ...]) -> tuple[WarmupRequirement, ...]:
         return tuple(sorted(values, key=lambda item: item.subscription.key))
 
+    @field_validator("triggers")
+    @classmethod
+    def order_triggers(cls, values: tuple[TriggerSpec, ...]) -> tuple[TriggerSpec, ...]:
+        return tuple(sorted(values, key=lambda item: item.name))
+
+    @field_validator("parameters")
+    @classmethod
+    def order_parameters(cls, values: tuple[ParameterSpec, ...]) -> tuple[ParameterSpec, ...]:
+        return tuple(sorted(values, key=lambda item: item.name))
+
     @field_validator("dependencies")
     @classmethod
     def order_dependencies(cls, values: tuple[DependencySpec, ...]) -> tuple[DependencySpec, ...]:

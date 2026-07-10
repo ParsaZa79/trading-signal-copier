@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import unicodedata
 from collections.abc import Collection, Iterable, Mapping
@@ -367,6 +369,33 @@ class ContractModel(BaseModel):
                 raise AssertionError("invalid update unexpectedly validated")
             values.update(_MODEL_COPY_UPDATE_ADAPTER.validate_python(cast(dict[str, Any], update)))
         return self.__class__.model_validate(values)
+
+    def canonical_bytes(self) -> bytes:
+        """Return deterministic UTF-8 JSON bytes for this immutable contract."""
+        return canonical_bytes(self)
+
+    def sha256_digest(self) -> str:
+        """Return the prefixed SHA-256 identity of :meth:`canonical_bytes`."""
+        return sha256_digest(self)
+
+
+def canonical_bytes(value: ContractModel) -> bytes:
+    """Encode an immutable SDK contract as compact, key-sorted UTF-8 JSON."""
+    validated = value.__class__.model_validate(value)
+    payload = validated.model_dump(mode="json")
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=False,
+        allow_nan=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return encoded.encode("utf-8")
+
+
+def sha256_digest(value: ContractModel) -> str:
+    """Return a lowercase ``sha256:<hex>`` identity for an immutable contract."""
+    return f"sha256:{hashlib.sha256(canonical_bytes(value)).hexdigest()}"
 
 
 def as_utc(value: datetime) -> datetime:

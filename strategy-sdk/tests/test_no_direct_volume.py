@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
@@ -87,6 +88,31 @@ def test_intent_schemas_structurally_exclude_execution_and_user_risk_fields() ->
     for model in INTENT_MODELS:
         field_names = set(model.model_fields)
         assert field_names.isdisjoint(FORBIDDEN_FIELDS), model.__name__
+
+
+def test_strategy_visible_position_graph_recursively_excludes_final_volume() -> None:
+    import trading_strategy_sdk as sdk
+
+    position = sdk.Position(
+        position_id="position_1",
+        symbol=sdk.Symbol.EURUSD,
+        side=sdk.PositionSide.BUY,
+        average_price=Decimal("1.1000"),
+        opened_at=datetime(2026, 7, 10, tzinfo=UTC),
+        stop_loss=Decimal("1.0900"),
+        source_order_ids=("order_1",),
+    )
+    book = sdk.PositionBook(mode=sdk.PositionMode.HEDGING, positions=(position,))
+
+    assert "volume" not in sdk.Position.model_fields
+    assert "volume" not in sdk.Position.model_json_schema(mode="validation").get("properties", {})
+    assert "volume" not in book.model_dump_json()
+
+    context_schema = sdk.StrategyContext.model_json_schema(mode="validation")
+    assert all(
+        "volume" not in definition.get("properties", {})
+        for definition in context_schema.get("$defs", {}).values()
+    )
 
 
 @pytest.mark.parametrize(

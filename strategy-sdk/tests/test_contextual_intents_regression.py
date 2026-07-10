@@ -97,7 +97,6 @@ def _position(
         position_id=position_id,
         symbol=symbol,
         side=side,
-        volume=Decimal("0.10"),
         average_price=average_price,
         opened_at=EVENT_TIME - timedelta(minutes=5),
         stop_loss=stop_loss,
@@ -274,6 +273,99 @@ def test_order_intent_validator_can_enforce_spec_and_context_semantics() -> None
             _place_order(symbol=sdk.Symbol.XAUUSD),
             spec=spec,
             context=context,
+        )
+
+
+@pytest.mark.parametrize(
+    ("order_type", "equal_price", "valid_price", "inverted_price"),
+    [
+        (sdk.OrderType.BUY_LIMIT, "1.1001", "1.1000", "1.1002"),
+        (sdk.OrderType.SELL_STOP, "1.1000", "1.0999", "1.1001"),
+        (sdk.OrderType.SELL_LIMIT, "1.1000", "1.1001", "1.0999"),
+        (sdk.OrderType.BUY_STOP, "1.1001", "1.1002", "1.1000"),
+        (sdk.OrderType.BUY_STOP_LIMIT, "1.1001", "1.1002", "1.1000"),
+        (sdk.OrderType.SELL_STOP_LIMIT, "1.1000", "1.0999", "1.1001"),
+    ],
+)
+def test_pending_entries_use_side_correct_current_quote_boundaries(
+    order_type: sdk.OrderType,
+    equal_price: str,
+    valid_price: str,
+    inverted_price: str,
+) -> None:
+    spec = _spec()
+    context = _context(spec)
+
+    def intent(entry: str) -> sdk.PlaceOrderIntent:
+        price = Decimal(entry)
+        values: dict[str, object] = {
+            "intent_id": "place_1",
+            "symbol": sdk.Symbol.EURUSD,
+            "order_type": order_type,
+            "entry_price": price,
+            "stop_loss": Decimal("1.0900") if order_type.is_buy else Decimal("1.1100"),
+            "filling": sdk.OrderFilling.RETURN,
+        }
+        if order_type is sdk.OrderType.BUY_STOP_LIMIT:
+            values["stop_limit_price"] = price - Decimal("0.0001")
+        elif order_type is sdk.OrderType.SELL_STOP_LIMIT:
+            values["stop_limit_price"] = price + Decimal("0.0001")
+        return sdk.PlaceOrderIntent.model_validate(values)
+
+    assert _validate_output(spec=spec, context=context, intents=(intent(equal_price),))
+    assert _validate_output(spec=spec, context=context, intents=(intent(valid_price),))
+    with pytest.raises(ValidationError, match=r"current (Bid|Ask)|quote"):
+        _validate_output(spec=spec, context=context, intents=(intent(inverted_price),))
+
+
+def test_oco_legs_and_order_modifications_recheck_current_quote_boundaries() -> None:
+    spec = _spec(capabilities=frozenset({sdk.Capability.PLATFORM_OCO}))
+    pending = sdk.PendingOrder(
+        order_id="order_1",
+        symbol=sdk.Symbol.EURUSD,
+        order_type=sdk.OrderType.BUY_LIMIT,
+        entry_price=Decimal("1.1000"),
+        stop_loss=Decimal("1.0900"),
+        placed_at=EVENT_TIME - timedelta(minutes=1),
+    )
+    context = _context(spec, pending_orders=(pending,))
+    inverted_group = sdk.OcoGroup(
+        group_id="breakout",
+        legs=(
+            sdk.OcoLeg(
+                leg_id="long",
+                symbol=sdk.Symbol.EURUSD,
+                order_type=sdk.OrderType.BUY_STOP,
+                entry_price=Decimal("1.1000"),
+                stop_loss=Decimal("1.0900"),
+            ),
+            sdk.OcoLeg(
+                leg_id="short",
+                symbol=sdk.Symbol.EURUSD,
+                order_type=sdk.OrderType.SELL_STOP,
+                entry_price=Decimal("1.0990"),
+                stop_loss=Decimal("1.1100"),
+            ),
+        ),
+    )
+
+    with pytest.raises(ValidationError, match="current Ask"):
+        _validate_output(
+            spec=spec,
+            context=context,
+            intents=(sdk.PlaceOcoIntent(intent_id="oco_1", group=inverted_group),),
+        )
+    with pytest.raises(ValidationError, match="current Ask"):
+        _validate_output(
+            spec=spec,
+            context=context,
+            intents=(
+                sdk.ModifyOrderIntent(
+                    intent_id="modify_1",
+                    order_id="order_1",
+                    entry_price=Decimal("1.1002"),
+                ),
+            ),
         )
 
 
@@ -592,7 +684,6 @@ def test_immediate_position_trailing_uses_current_protection_basis_when_visible(
         position_id="position_1",
         symbol=sdk.Symbol.EURUSD,
         side=sdk.PositionSide.BUY,
-        volume=Decimal("0.1"),
         average_price=average_price,
         opened_at=EVENT_TIME - timedelta(minutes=5),
         stop_loss=Decimal("1.0000"),
@@ -727,7 +818,6 @@ def test_protection_basis_uses_latest_visible_bar_across_snapshot_and_histories(
         position_id="position_1",
         symbol=sdk.Symbol.EURUSD,
         side=sdk.PositionSide.BUY,
-        volume=Decimal("0.1"),
         average_price=Decimal("1.1000"),
         opened_at=EVENT_TIME - timedelta(minutes=30),
         stop_loss=Decimal("1.0000"),
@@ -922,7 +1012,6 @@ def test_missing_symbol_data_never_disables_existing_position_protection(
         position_id="xau_position",
         symbol=sdk.Symbol.XAUUSD,
         side=sdk.PositionSide.BUY,
-        volume=Decimal("0.1"),
         average_price=Decimal("2400"),
         opened_at=EVENT_TIME - timedelta(minutes=5),
         stop_loss=Decimal("2390"),

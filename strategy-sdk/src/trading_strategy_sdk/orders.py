@@ -239,6 +239,11 @@ class ManagedExitPlan(ContractModel):
     break_even: BreakEven | None = None
     partials: tuple[PartialExit, ...] = ()
 
+    @field_validator("partials")
+    @classmethod
+    def order_partials(cls, values: tuple[PartialExit, ...]) -> tuple[PartialExit, ...]:
+        return tuple(sorted(values, key=lambda item: item.trigger_price))
+
     @model_validator(mode="after")
     def validate_plan(self) -> Self:
         if (
@@ -357,6 +362,11 @@ class OcoGroup(ContractModel):
     group_id: Identifier
     legs: Annotated[tuple[OcoLeg, ...], Field(min_length=2)]
 
+    @field_validator("legs")
+    @classmethod
+    def order_legs(cls, values: tuple[OcoLeg, ...]) -> tuple[OcoLeg, ...]:
+        return tuple(sorted(values, key=lambda item: item.leg_id))
+
     @model_validator(mode="after")
     def validate_legs(self) -> Self:
         leg_ids = [leg.leg_id for leg in self.legs]
@@ -426,6 +436,11 @@ class OcoGroupSnapshot(ContractModel):
     oco_group_id: OpaqueId
     legs: Annotated[tuple[OcoLegSnapshot, ...], Field(min_length=2)]
     created_at: datetime
+
+    @field_validator("legs")
+    @classmethod
+    def order_legs(cls, values: tuple[OcoLegSnapshot, ...]) -> tuple[OcoLegSnapshot, ...]:
+        return tuple(sorted(values, key=lambda item: item.leg_id))
 
     @field_validator("created_at")
     @classmethod
@@ -499,6 +514,13 @@ class OcoPlacementResult(ContractModel):
     oco_group_id: OpaqueId
     legs: Annotated[tuple[OcoLegPlacementResult, ...], Field(min_length=2)]
     created_at: datetime
+
+    @field_validator("legs")
+    @classmethod
+    def order_legs(
+        cls, values: tuple[OcoLegPlacementResult, ...]
+    ) -> tuple[OcoLegPlacementResult, ...]:
+        return tuple(sorted(values, key=lambda item: item.leg_id))
 
     @field_validator("created_at")
     @classmethod
