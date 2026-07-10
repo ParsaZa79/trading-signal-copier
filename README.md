@@ -66,14 +66,11 @@ uv sync --dev
 
 ### MT5 Docker Container
 
-Linux uses the [gmag11/metatrader5_vnc](https://github.com/gmag11/MetaTrader5-Docker) Docker image which runs MT5 inside Wine with a VNC web interface and an RPyC server for programmatic access.
+Linux uses the pinned, hardened image in [`mt5/Dockerfile`](mt5/Dockerfile). It runs MT5 inside Wine with a VNC web interface and upgrades the Wine-side RPyC server to the audited client-compatible version.
 
 ```bash
-# Option A: Use the start script (recommended)
-./start-linux.sh
-
-# Option B: Run manually
-docker run -d --name mt5 -p 3000:3000 -p 8001:8001 gmag11/metatrader5_vnc
+export MT5_VNC_PASSWORD='choose-a-local-password'
+docker compose -f mt5/compose.local.yaml up -d --build
 ```
 
 After the container starts:
@@ -82,8 +79,8 @@ After the container starts:
 3. Log in to your broker account through the MT5 terminal in VNC
 
 **Important ports:**
-- `3000` — VNC web interface (for MT5 GUI access)
-- `8001` — RPyC server (how the API/bot connect to MT5 programmatically)
+- `3000` — loopback-only VNC web interface (for MT5 GUI access)
+- `8001` — RPyC Classic; loopback-only locally and private-container-network-only in production. Never publish it publicly.
 
 ### How MT5 Connection Works on Each Platform
 

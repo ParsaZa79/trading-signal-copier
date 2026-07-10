@@ -1,0 +1,19 @@
+services:
+  mt5:
+    build:
+      context: ..
+      dockerfile: mt5/Dockerfile
+    image: trading-platform/mt5-rpyc:6.0.2
+    restart: unless-stopped
+    environment:
+      CUSTOM_USER: ${MT5_VNC_USER:-local}
+      PASSWORD: ${MT5_VNC_PASSWORD:?set MT5_VNC_PASSWORD}
+    ports:
+      - "127.0.0.1:${MT5_VNC_PORT:-3000}:3000"
+      - "127.0.0.1:${MT5_RPYC_PORT:-8001}:8001"
+    volumes:
+      - mt5-config-local:/config
+
+volumes:
+  mt5-config-local:
+    name: trading-mt5-config-local
