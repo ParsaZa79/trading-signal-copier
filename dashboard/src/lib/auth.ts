@@ -1,4 +1,5 @@
 import { betterAuth, type BetterAuthOptions } from "better-auth";
+import { APIError } from "better-auth/api";
 import { admin as adminPlugin, captcha, jwt } from "better-auth/plugins";
 import { Pool, type PoolConfig } from "pg";
 import {
@@ -70,13 +71,9 @@ export class AuthConfigurationError extends Error {
 export function resolveBetterAuthSettings(
   environment: Environment,
 ): BetterAuthSettings | null {
-  const strategyLabFlag =
-    environment.STRATEGY_LAB_ENABLED ??
-    environment.NEXT_PUBLIC_STRATEGY_LAB_ENABLED;
-
   if (
     !isExplicitlyEnabled(environment.BETTER_AUTH_ENABLED) ||
-    !isExplicitlyEnabled(strategyLabFlag)
+    !isExplicitlyEnabled(environment.STRATEGY_LAB_ENABLED)
   ) {
     return null;
   }
@@ -206,6 +203,26 @@ export function buildBetterAuthOptions(
     secret: settings.secret,
     trustedOrigins: settings.trustedOrigins,
     database,
+    logger: { disabled: true },
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => ({
+            data: {
+              ...user,
+              role: requirePersistedAuthRole(user.role, true),
+            },
+          }),
+        },
+        update: {
+          before: async (user) => ({
+            data: Object.prototype.hasOwnProperty.call(user, "role")
+              ? { ...user, role: requirePersistedAuthRole(user.role, false) }
+              : user,
+          }),
+        },
+      },
+    },
     emailAndPassword: {
       enabled: true,
       disableSignUp: !settings.openSignupEnabled,
@@ -219,12 +236,12 @@ export function buildBetterAuthOptions(
         sendEmailWithoutWaiting(sendEmail, passwordResetEmail(user.email, url));
       },
       customSyntheticUser: ({ coreFields, additionalFields, id }) => ({
+        ...additionalFields,
         ...coreFields,
         role: DEFAULT_ROLE,
         banned: false,
         banReason: null,
         banExpires: null,
-        ...additionalFields,
         id,
       }),
     },
@@ -351,7 +368,14 @@ export async function handleBetterAuthRequest(
   if (!auth) {
     return disabledHandler(request);
   }
-  return auth.handler(request);
+  try {
+    return withPrivateNoStore(await auth.handler(request));
+  } catch {
+    if (process.env.NODE_ENV !== "test") {
+      console.error("[auth] Better Auth request failed");
+    }
+    return authErrorResponse(503, "Authentication service unavailable");
+  }
 }
 
 function createPoolConfig(settings: BetterAuthSettings): PoolConfig {
@@ -376,6 +400,19 @@ function createPostgresPool(settings: BetterAuthSettings) {
 
 function isExplicitlyEnabled(value: string | undefined) {
   return value?.trim().toLowerCase() === "true";
+}
+
+function requirePersistedAuthRole(value: unknown, defaultWhenMissing: boolean) {
+  if (defaultWhenMissing && value === undefined) {
+    return DEFAULT_ROLE;
+  }
+  if (!isAuthRole(value)) {
+    throw APIError.from("BAD_REQUEST", {
+      code: "INVALID_ROLE",
+      message: "Invalid role",
+    });
+  }
+  return value;
 }
 
 function parseOrigin(value: string, variable: string, requireHttps = false) {
@@ -443,13 +480,23 @@ function sendEmailWithoutWaiting(
 }
 
 function authErrorResponse(status: number, error: string) {
-  return Response.json(
-    { error },
-    {
-      status,
-      headers: {
-        "Cache-Control": "no-store",
+  return withPrivateNoStore(
+    Response.json(
+      { error },
+      {
+        status,
       },
-    },
+    ),
   );
+}
+
+function withPrivateNoStore(response: Response) {
+  const headers = new Headers(response.headers);
+  headers.set("Cache-Control", "private, no-store");
+  headers.set("Pragma", "no-cache");
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
 }

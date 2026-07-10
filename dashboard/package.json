@@ -7,7 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "auth:schema:bootstrap:test": "bun scripts/apply-auth-schema.ts --schema-only --test-database",
+    "auth:schema:apply:test": "bun scripts/apply-auth-schema.ts --test-database",
+    "auth:schema:generate": "bun scripts/generate-auth-schema.ts",
+    "auth:schema:validate": "bun scripts/validate-auth-schema.ts",
+    "auth:schema:apply": "bun scripts/apply-auth-schema.ts",
+    "test:postgres": "vitest run src/lib/auth/auth.postgres.test.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^7.5.7",
@@ -33,6 +39,8 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
+    "jose": "6.2.3",
+    "kysely": "0.29.3",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "4.1.10"

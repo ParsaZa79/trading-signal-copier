@@ -14,12 +14,18 @@ export const authClient = createAuthClient({
   ],
 });
 
+type TokenClient = Pick<typeof authClient, "token">;
+
 /**
  * Fetch a short-lived FastAPI bearer token without persisting it in browser
  * storage. Callers own the returned in-memory value.
  */
-export async function getBetterAuthJwt(): Promise<string | null> {
-  const { data, error } = await authClient.token();
+export async function getBetterAuthJwt(
+  client: TokenClient = authClient,
+): Promise<string | null> {
+  const { data, error } = await client.token({
+    fetchOptions: { cache: "no-store" },
+  });
   if (error) {
     return null;
   }

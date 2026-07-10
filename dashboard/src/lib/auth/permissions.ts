@@ -1,8 +1,5 @@
 import { createAccessControl } from "better-auth/plugins/access";
-import {
-  adminAc,
-  defaultStatements,
-} from "better-auth/plugins/admin/access";
+import { defaultStatements } from "better-auth/plugins/admin/access";
 
 export const AUTH_ROLES = ["owner", "admin", "trader", "viewer"] as const;
 export type AuthRole = (typeof AUTH_ROLES)[number];
@@ -18,7 +15,11 @@ const owner = authAccessControl.newRole({
   ...defaultStatements,
 });
 const admin = authAccessControl.newRole({
-  ...adminAc.statements,
+  // Admins may create a default-role trader and inspect users, but every
+  // existing-user mutation (including role assignment) is owner-only. Session
+  // listing is intentionally excluded because Better Auth returns raw tokens.
+  user: ["create", "list", "get"],
+  session: [],
 });
 const trader = authAccessControl.newRole({
   user: [],

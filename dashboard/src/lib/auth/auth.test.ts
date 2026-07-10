@@ -83,6 +83,30 @@ describe("Better Auth feature gates", () => {
     expect(dependencies.createAuth).not.toHaveBeenCalled();
   });
 
+  it("requires both private server flags and ignores the public UI flag", () => {
+    expect(
+      resolveBetterAuthSettings({
+        ...COMPLETE_ENV,
+        STRATEGY_LAB_ENABLED: undefined,
+        NEXT_PUBLIC_STRATEGY_LAB_ENABLED: "true",
+      }),
+    ).toBeNull();
+    expect(
+      resolveBetterAuthSettings({
+        ...COMPLETE_ENV,
+        STRATEGY_LAB_ENABLED: "false",
+        NEXT_PUBLIC_STRATEGY_LAB_ENABLED: "true",
+      }),
+    ).toBeNull();
+    expect(
+      resolveBetterAuthSettings({
+        ...COMPLETE_ENV,
+        STRATEGY_LAB_ENABLED: "true",
+        NEXT_PUBLIC_STRATEGY_LAB_ENABLED: "false",
+      }),
+    ).toMatchObject({ baseURL: COMPLETE_ENV.BETTER_AUTH_URL });
+  });
+
   it("fails closed without activation configuration and never exposes values", () => {
     const incomplete = {
       NODE_ENV: "test",
@@ -168,6 +192,7 @@ describe("Better Auth server options", () => {
         "/request-password-reset": { window: 3600, max: 3 },
       },
     });
+    expect(options.logger).toEqual({ disabled: true });
 
     const adminOptions = getPluginOptions(options, "admin");
     expect(adminOptions).toMatchObject({
@@ -205,16 +230,26 @@ describe("Better Auth server options", () => {
         createdAt: new Date(0),
         updatedAt: new Date(0),
       },
-      additionalFields: {},
+      additionalFields: {
+        id: "attacker-id",
+        name: "Attacker Name",
+        email: "attacker@example.test",
+        role: "owner",
+        banned: true,
+        banReason: "attacker-controlled",
+        banExpires: new Date(1),
+      },
       id: "generated-id",
     });
-    expect(syntheticUser).toMatchObject({
+    expect(syntheticUser).toEqual(expect.objectContaining({
       id: "generated-id",
+      name: "Test User",
+      email: "user@example.test",
       role: DEFAULT_ROLE,
       banned: false,
       banReason: null,
       banExpires: null,
-    });
+    }));
   });
 
   it("allows signup only when every gate is explicitly enabled", () => {
@@ -249,15 +284,94 @@ describe("Better Auth server options", () => {
     );
     expect(dependencies.createEmailSender).toHaveReturnedWith(sendEmail);
   });
+
+  it("persists exactly one known role and defaults new users to trader", async () => {
+    const settings = resolveBetterAuthSettings(COMPLETE_ENV)!;
+    const options = buildBetterAuthOptions(
+      settings,
+      {} as Pool,
+      vi.fn(async () => undefined),
+    );
+    const createGuard = options.databaseHooks?.user?.create?.before;
+    const updateGuard = options.databaseHooks?.user?.update?.before;
+    expect(createGuard).toBeTypeOf("function");
+    expect(updateGuard).toBeTypeOf("function");
+
+    const defaulted = await createGuard?.(
+      { id: "new-user", email: "new@example.test" } as never,
+      null,
+    );
+    expect(defaulted).toEqual({
+      data: expect.objectContaining({ role: DEFAULT_ROLE }),
+    });
+
+    for (const role of AUTH_ROLES) {
+      await expect(
+        createGuard?.({ id: "new-user", role } as never, null),
+      ).resolves.toEqual({ data: expect.objectContaining({ role }) });
+      await expect(updateGuard?.({ role } as never, null)).resolves.toEqual({
+        data: expect.objectContaining({ role }),
+      });
+    }
+
+    for (const hostileRole of [
+      ["owner"],
+      "owner,admin",
+      " owner",
+      "OWNER",
+      "__proto__",
+      "constructor",
+      "toString",
+      "",
+      null,
+    ]) {
+      await expect(
+        createGuard?.({ id: "new-user", role: hostileRole } as never, null),
+      ).rejects.toThrow(/invalid role/i);
+      await expect(
+        updateGuard?.({ role: hostileRole } as never, null),
+      ).rejects.toThrow(/invalid role/i);
+    }
+  });
 });
 
 describe("roles and JWT claims", () => {
-  it("defines only the four planned roles with least-privilege user defaults", () => {
+  it("reserves every role and owner mutation for owners", () => {
     expect(Object.keys(authRoles)).toEqual(AUTH_ROLES);
-    expect(authRoles.owner.authorize({ user: ["list"] }).success).toBe(true);
-    expect(authRoles.admin.authorize({ user: ["list"] }).success).toBe(true);
+    for (const permission of [
+      "set-role",
+      "ban",
+      "impersonate",
+      "delete",
+      "set-password",
+      "set-email",
+      "update",
+    ] as const) {
+      expect(authRoles.owner.authorize({ user: [permission] }).success).toBe(true);
+      expect(authRoles.admin.authorize({ user: [permission] }).success).toBe(false);
+    }
+    for (const permission of ["revoke", "delete", "list"] as const) {
+      expect(authRoles.owner.authorize({ session: [permission] }).success).toBe(true);
+      expect(authRoles.admin.authorize({ session: [permission] }).success).toBe(false);
+    }
+    expect(authRoles.admin.authorize({ user: ["create", "list", "get"] }).success).toBe(
+      true,
+    );
     expect(authRoles.trader.authorize({ user: ["list"] }).success).toBe(false);
     expect(authRoles.viewer.authorize({ user: ["list"] }).success).toBe(false);
+  });
+
+  it("allows only an owner role to perform protected role transitions", () => {
+    for (const targetRole of AUTH_ROLES) {
+      expect(
+        authRoles.owner.authorize({ user: ["set-role"] }).success,
+        `owner should be able to assign ${targetRole}`,
+      ).toBe(true);
+      expect(
+        authRoles.admin.authorize({ user: ["set-role"] }).success,
+        `admin must not be able to assign ${targetRole}`,
+      ).toBe(false);
+    }
   });
 
   it("uses the stable user id as subject and emits only required custom claims", () => {
@@ -309,8 +423,46 @@ describe("dormant catch-all handler", () => {
     );
 
     expect(response.status).toBe(404);
-    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("pragma")).toBe("no-cache");
     expect(resolveAuth).toHaveBeenCalledOnce();
+  });
+
+  it("overrides cacheable headers on every enabled Better Auth response", async () => {
+    const response = await handleBetterAuthRequest(
+      new Request("https://dashboard.example.test/api/auth/token"),
+      () => ({
+        handler: vi.fn(async () =>
+          Response.json(
+            { token: "short-lived-secret" },
+            { headers: { "Cache-Control": "public, max-age=3600" } },
+          ),
+        ),
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("pragma")).toBe("no-cache");
+  });
+
+  it("returns a generic non-cacheable response when the auth handler fails", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const response = await handleBetterAuthRequest(
+      new Request("https://dashboard.example.test/api/auth/token"),
+      () => ({
+        handler: vi.fn(async () => {
+          throw new Error("do-not-log-handler-secret");
+        }),
+      }),
+    );
+
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({ error: "Authentication service unavailable" });
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("pragma")).toBe("no-cache");
+    expect(JSON.stringify(logged.mock.calls)).not.toContain("do-not-log-handler-secret");
+    logged.mockRestore();
   });
 
   it("returns a generic 503 for invalid enabled configuration", async () => {
@@ -323,5 +475,7 @@ describe("dormant catch-all handler", () => {
 
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({ error: "Authentication service unavailable" });
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("pragma")).toBe("no-cache");
   });
 });
