@@ -10,6 +10,10 @@ export const REST_API_URL = CLERK_ENABLED ? "" : API_URL;
 export const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL || "wss://api.kiaparsaprintingmoneymachine.cloud/ws";
 
+export const FEATURE_FLAGS = {
+  strategyLab: process.env.NEXT_PUBLIC_STRATEGY_LAB_ENABLED === "true",
+} as const;
+
 // Available symbols
 export const SYMBOLS = [
   { value: "XAUUSDb", label: "XAUUSDb (Gold)" },
