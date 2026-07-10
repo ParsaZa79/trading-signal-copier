@@ -63,14 +63,14 @@ def test_stop_limit_and_expiration_fields_are_validated() -> None:
         symbol=Symbol.EURUSD,
         order_type=OrderType.BUY_STOP_LIMIT,
         entry_price=Decimal("1.1050"),
-        stop_limit_price=Decimal("1.1052"),
+        stop_limit_price=Decimal("1.1048"),
         stop_loss=Decimal("1.0950"),
         filling=OrderFilling.RETURN,
         time=OrderTime.SPECIFIED,
         expires_at=expires_at,
     )
 
-    assert leg.stop_limit_price == Decimal("1.1052")
+    assert leg.stop_limit_price == Decimal("1.1048")
     assert OcoLeg.model_validate_json(leg.model_dump_json()) == leg
 
     with pytest.raises(ValidationError, match="stop_limit_price"):

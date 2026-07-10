@@ -64,6 +64,7 @@ def _context(
         ),
         histories=histories,
         synchronized_bars=synchronized_bars,
+        position_mode=PositionMode.HEDGING,
         positions=PositionBook(mode=PositionMode.HEDGING),
         state=StrategyState.empty(),
     )

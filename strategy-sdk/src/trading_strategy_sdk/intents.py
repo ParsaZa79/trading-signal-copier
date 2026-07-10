@@ -4,11 +4,25 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Annotated, Literal, Self, final
+from typing import TYPE_CHECKING, Annotated, Literal, Self, cast, final
 
-from pydantic import Field, TypeAdapter, field_validator, model_validator
+from pydantic import (
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    field_validator,
+    model_validator,
+)
 
-from trading_strategy_sdk._model import ContractModel, Identifier, OpaqueId, Price, as_utc
+from trading_strategy_sdk._model import (
+    ContractModel,
+    Identifier,
+    OpaqueId,
+    Price,
+    as_utc,
+    has_plain_bounded_validation_containers,
+)
 from trading_strategy_sdk.market import Symbol
 from trading_strategy_sdk.orders import (
     ManagedExitPlan,
@@ -17,18 +31,15 @@ from trading_strategy_sdk.orders import (
     OrderTime,
     OrderType,
     TradeAction,
+    validate_pending_order_semantics,
 )
 from trading_strategy_sdk.positions import PositionSide
 
+if TYPE_CHECKING:
+    from trading_strategy_sdk.context import StrategyContext
+    from trading_strategy_sdk.spec import StrategySpec
+
 _EXPIRING_ORDER_TIMES = frozenset({OrderTime.SPECIFIED, OrderTime.SPECIFIED_DAY})
-_BOC_ORDER_TYPES = frozenset(
-    {
-        OrderType.BUY_LIMIT,
-        OrderType.SELL_LIMIT,
-        OrderType.BUY_STOP_LIMIT,
-        OrderType.SELL_STOP_LIMIT,
-    }
-)
 
 
 @final
@@ -95,43 +106,35 @@ class PlaceOrderIntent(_OrderIntentModel):
                 raise ValueError("market orders cannot set stop_limit_price")
             if self.time is not OrderTime.GTC or self.expires_at is not None:
                 raise ValueError("market orders cannot set pending-order expiration")
-        else:
-            if not self.order_type.is_pending:  # pragma: no cover - CLOSE_BY handled above
-                raise ValueError("unsupported placement order type")
-            if self.entry_price is None:
-                raise ValueError("pending orders require entry_price")
-            if self.order_type.is_stop_limit and self.stop_limit_price is None:
-                raise ValueError("stop-limit orders require stop_limit_price")
-            if not self.order_type.is_stop_limit and self.stop_limit_price is not None:
-                raise ValueError("stop_limit_price is valid only for stop-limit orders")
-
-        if (self.time in _EXPIRING_ORDER_TIMES) != (self.expires_at is not None):
-            raise ValueError("SPECIFIED order times require expires_at and other times forbid it")
-        if self.filling is OrderFilling.BOC and self.order_type not in _BOC_ORDER_TYPES:
-            raise ValueError("BOC is valid only for limit and stop-limit orders")
-        if (
-            self.managed_exit is not None
-            and self.managed_exit.bracket is not None
-            and (self.stop_loss is not None or self.take_profit is not None)
-        ):
-            raise ValueError("native SL/TP cannot duplicate a managed bracket")
+            if self.filling is OrderFilling.BOC:
+                raise ValueError("BOC is valid only for limit and stop-limit orders")
+        elif not self.order_type.is_pending:  # pragma: no cover - CLOSE_BY handled above
+            raise ValueError("unsupported placement order type")
+        elif self.entry_price is None:
+            raise ValueError("pending orders require entry_price")
 
         bracket = self.managed_exit.bracket if self.managed_exit is not None else None
+        if bracket is not None and (self.stop_loss is not None or self.take_profit is not None):
+            raise ValueError("native SL/TP cannot duplicate a managed bracket")
         stop_loss = bracket.stop_loss if bracket is not None else self.stop_loss
         take_profit = bracket.take_profit if bracket is not None else self.take_profit
         if stop_loss is None:
             raise ValueError("entry intents require a technical stop loss")
-        if self.entry_price is not None:
-            if self.order_type.is_buy:
-                if stop_loss >= self.entry_price:
-                    raise ValueError("BUY entry stop loss must be below entry_price")
-                if take_profit is not None and take_profit <= self.entry_price:
-                    raise ValueError("BUY entry take profit must be above entry_price")
-            else:
-                if stop_loss <= self.entry_price:
-                    raise ValueError("SELL entry stop loss must be above entry_price")
-                if take_profit is not None and take_profit >= self.entry_price:
-                    raise ValueError("SELL entry take profit must be below entry_price")
+        if self.order_type.is_market:
+            return self
+
+        assert self.entry_price is not None  # narrowed by the pending-order branch above
+        validate_pending_order_semantics(
+            order_type=self.order_type,
+            entry_price=self.entry_price,
+            stop_limit_price=self.stop_limit_price,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            filling=self.filling,
+            time=self.time,
+            expires_at=self.expires_at,
+            label="entry",
+        )
         return self
 
     @property
@@ -148,8 +151,63 @@ class PlaceOcoIntent(_OrderIntentModel):
     group: OcoGroup
 
     @property
-    def action(self) -> TradeAction:
-        return TradeAction.PENDING
+    def action(self) -> None:
+        """OCO expands to multiple platform-managed native requests."""
+        return None
+
+
+@final
+class ModifyOcoIntent(_OrderIntentModel):
+    """Atomically replace the technical definition of an active OCO group."""
+
+    kind: Literal["modify_oco"] = "modify_oco"
+    oco_group_id: OpaqueId
+    group: OcoGroup
+
+    @property
+    def action(self) -> None:
+        """A managed group modification has no single native action."""
+        return None
+
+
+@final
+class CancelOcoIntent(_OrderIntentModel):
+    """Cancel every remaining order in one active OCO group."""
+
+    kind: Literal["cancel_oco"] = "cancel_oco"
+    oco_group_id: OpaqueId
+
+    @property
+    def action(self) -> None:
+        """A managed group cancellation has no single native action."""
+        return None
+
+
+@final
+class ModifyManagedExitIntent(_OrderIntentModel):
+    """Replace one active platform-managed exit plan."""
+
+    kind: Literal["modify_managed_exit"] = "modify_managed_exit"
+    managed_exit_plan_id: OpaqueId
+    managed_exit: ManagedExitPlan
+
+    @property
+    def action(self) -> None:
+        """A managed plan replacement has no single native action."""
+        return None
+
+
+@final
+class ClearManagedExitIntent(_OrderIntentModel):
+    """Clear one managed exit plan when bounded protection remains."""
+
+    kind: Literal["clear_managed_exit"] = "clear_managed_exit"
+    managed_exit_plan_id: OpaqueId
+
+    @property
+    def action(self) -> None:
+        """A managed plan removal has no single native action."""
+        return None
 
 
 @final
@@ -164,7 +222,6 @@ class ModifyOrderIntent(_OrderIntentModel):
     take_profit: Price | None = None
     time: OrderTime | None = None
     expires_at: datetime | None = None
-    clear_stop_loss: bool = False
     clear_take_profit: bool = False
     clear_expiration: bool = False
 
@@ -185,10 +242,8 @@ class ModifyOrderIntent(_OrderIntentModel):
                 self.time,
                 self.expires_at,
             )
-        ) and not (self.clear_stop_loss or self.clear_take_profit or self.clear_expiration):
+        ) and not (self.clear_take_profit or self.clear_expiration):
             raise ValueError("modify intent requires at least one technical change")
-        if self.stop_loss is not None and self.clear_stop_loss:
-            raise ValueError("modify intent cannot set and clear stop_loss")
         if self.take_profit is not None and self.clear_take_profit:
             raise ValueError("modify intent cannot set and clear take_profit")
         if self.expires_at is not None and self.clear_expiration:
@@ -228,7 +283,6 @@ class ProtectPositionIntent(_OrderIntentModel):
     stop_loss: Price | None = None
     take_profit: Price | None = None
     managed_exit: ManagedExitPlan | None = None
-    clear_stop_loss: bool = False
     clear_take_profit: bool = False
 
     @model_validator(mode="after")
@@ -237,25 +291,30 @@ class ProtectPositionIntent(_OrderIntentModel):
             self.stop_loss is None
             and self.take_profit is None
             and self.managed_exit is None
-            and not self.clear_stop_loss
             and not self.clear_take_profit
         ):
             raise ValueError("protect intent requires at least one technical protection")
-        if self.stop_loss is not None and self.clear_stop_loss:
-            raise ValueError("protect intent cannot set and clear stop_loss")
         if self.take_profit is not None and self.clear_take_profit:
             raise ValueError("protect intent cannot set and clear take_profit")
         if (
             self.managed_exit is not None
             and self.managed_exit.bracket is not None
-            and (self.clear_stop_loss or self.clear_take_profit)
+            and self.clear_take_profit
         ):
             raise ValueError("managed bracket cannot set and clear protection")
+        if (
+            self.managed_exit is not None
+            and self.managed_exit.bracket is not None
+            and (self.stop_loss is not None or self.take_profit is not None)
+        ):
+            raise ValueError("native SL/TP cannot duplicate a managed bracket")
         return self
 
     @property
-    def action(self) -> TradeAction:
-        return TradeAction.SLTP
+    def action(self) -> TradeAction | None:
+        if self.stop_loss is not None or self.take_profit is not None or self.clear_take_profit:
+            return TradeAction.SLTP
+        return None
 
 
 @final
@@ -290,20 +349,83 @@ class CloseByIntent(_OrderIntentModel):
         return TradeAction.CLOSE_BY
 
 
+_ORDER_INTENT_MODEL_TYPES = frozenset(
+    {
+        PlaceOrderIntent,
+        PlaceOcoIntent,
+        ModifyOcoIntent,
+        CancelOcoIntent,
+        ModifyManagedExitIntent,
+        ClearManagedExitIntent,
+        ModifyOrderIntent,
+        CancelOrderIntent,
+        ProtectPositionIntent,
+        ClosePositionIntent,
+        CloseByIntent,
+    }
+)
+
+
+def _plain_order_intent_input(value: object) -> object:
+    if type(value) in _ORDER_INTENT_MODEL_TYPES:
+        try:
+            storage: object = object.__getattribute__(value, "__dict__")
+        except Exception:
+            return {}
+        if type(storage) is not dict:
+            return {}
+        candidate = cast(dict[object, object], storage).copy()
+    elif type(value) is dict:
+        candidate = cast(dict[object, object], value)
+    else:
+        return {}
+    if not has_plain_bounded_validation_containers(candidate):
+        return {}
+    return candidate
+
+
 type OrderIntent = Annotated[
     PlaceOrderIntent
     | PlaceOcoIntent
+    | ModifyOcoIntent
+    | CancelOcoIntent
+    | ModifyManagedExitIntent
+    | ClearManagedExitIntent
     | ModifyOrderIntent
     | CancelOrderIntent
     | ProtectPositionIntent
     | ClosePositionIntent
     | CloseByIntent,
     Field(discriminator="kind"),
+    BeforeValidator(_plain_order_intent_input),
 ]
 
-_ORDER_INTENT_ADAPTER: TypeAdapter[OrderIntent] = TypeAdapter(OrderIntent)
+_ORDER_INTENT_ADAPTER: TypeAdapter[OrderIntent] = TypeAdapter(
+    OrderIntent,
+    config=ConfigDict(hide_input_in_errors=True),
+)
 
 
-def validate_order_intent(value: object) -> OrderIntent:
-    """Validate untrusted structured output against the closed intent union."""
-    return _ORDER_INTENT_ADAPTER.validate_python(value)
+def validate_order_intent(
+    value: object,
+    *,
+    spec: StrategySpec | None = None,
+    context: StrategyContext | None = None,
+) -> OrderIntent:
+    """Validate an intent structurally and, when supplied, against spec/context."""
+    if not has_plain_bounded_validation_containers(value):
+        return _ORDER_INTENT_ADAPTER.validate_python(None)
+    intent = _ORDER_INTENT_ADAPTER.validate_python(value)
+    if spec is None and context is None:
+        return intent
+    if spec is None or context is None:
+        raise TypeError("spec and context must be supplied together")
+
+    from trading_strategy_sdk.output import validate_strategy_output
+
+    output = validate_strategy_output(
+        {"signals": (), "intents": (intent,), "next_state": context.state},
+        spec=spec,
+        context=context,
+    )
+    return output.intents[0]

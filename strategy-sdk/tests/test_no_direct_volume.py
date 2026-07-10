@@ -6,9 +6,13 @@ import pytest
 from pydantic import ValidationError
 
 from trading_strategy_sdk.intents import (
+    CancelOcoIntent,
     CancelOrderIntent,
+    ClearManagedExitIntent,
     CloseByIntent,
     ClosePositionIntent,
+    ModifyManagedExitIntent,
+    ModifyOcoIntent,
     ModifyOrderIntent,
     PlaceOcoIntent,
     PlaceOrderIntent,
@@ -31,6 +35,10 @@ INTENT_MODELS = (
     SignalIntent,
     PlaceOrderIntent,
     PlaceOcoIntent,
+    ModifyOcoIntent,
+    CancelOcoIntent,
+    ModifyManagedExitIntent,
+    ClearManagedExitIntent,
     ModifyOrderIntent,
     CancelOrderIntent,
     ProtectPositionIntent,
@@ -132,6 +140,13 @@ def test_discriminated_order_intent_decoder_rejects_hidden_volume() -> None:
         validate_order_intent(payload)
 
 
+def test_direct_intent_decoder_hides_untrusted_input_values() -> None:
+    secret = "DO-NOT-ECHO-THIS-CREDENTIAL"
+    with pytest.raises(ValidationError) as error:
+        validate_order_intent({"kind": "unknown", "payload": secret})
+    assert secret not in str(error.value)
+
+
 def test_intent_copy_api_cannot_inject_an_unvalidated_field() -> None:
     intent = _place_order()
 
@@ -214,7 +229,7 @@ def test_modify_and_protect_intents_can_explicitly_clear_fields() -> None:
         order_id="order_1",
         time=OrderTime.GTC,
         clear_expiration=True,
-        clear_stop_loss=True,
+        clear_take_profit=True,
     )
     protect = ProtectPositionIntent(
         intent_id="clear_take_profit",
@@ -226,7 +241,7 @@ def test_modify_and_protect_intents_can_explicitly_clear_fields() -> None:
     assert modify.time is OrderTime.GTC
     assert protect.action is TradeAction.SLTP
 
-    with pytest.raises(ValidationError, match="set and clear"):
+    with pytest.raises(ValidationError, match=r"bounded|stop loss|stop_loss"):
         ProtectPositionIntent(
             intent_id="conflict",
             position_id="position_1",
@@ -257,5 +272,5 @@ def test_oco_intent_carries_technical_legs_but_no_size() -> None:
     )
     intent = PlaceOcoIntent(intent_id="oco_1", group=group)
 
-    assert intent.action is TradeAction.PENDING
+    assert intent.action is None
     assert "volume" not in intent.model_dump_json()

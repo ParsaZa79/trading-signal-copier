@@ -23,6 +23,7 @@ from trading_strategy_sdk._model import (
 from trading_strategy_sdk._model import (
     Identifier,
     NonEmptyText,
+    is_forbidden_strategy_data_name,
 )
 from trading_strategy_sdk.market import BarSubscription, Symbol, Timeframe
 from trading_strategy_sdk.orders import OrderFilling, OrderType
@@ -30,76 +31,6 @@ from trading_strategy_sdk.positions import PositionMode
 
 _PACKAGE_NAME = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._-]*[A-Za-z0-9])?$")
 _SHA256 = re.compile(r"^sha256:[0-9a-fA-F]{64}$")
-_FORBIDDEN_PARAMETER_NAMES = frozenset(
-    {
-        "account_balance",
-        "account_equity",
-        "allocation",
-        "credentials",
-        "final_lot",
-        "leverage",
-        "login",
-        "lot",
-        "lot_size",
-        "lots",
-        "password",
-        "risk_percent",
-        "risk_percentage",
-        "risk_policy",
-        "user_risk_policy",
-        "volume",
-    }
-)
-_FORBIDDEN_PARAMETER_TOKENS = frozenset(
-    {
-        "allocation",
-        "balance",
-        "credential",
-        "credentials",
-        "equity",
-        "leverage",
-        "login",
-        "lot",
-        "lots",
-        "password",
-        "secret",
-        "volume",
-    }
-)
-_FORBIDDEN_COMPACT_NAMES = frozenset(
-    {
-        "accountbalance",
-        "accountequity",
-        "finallot",
-        "lotsize",
-        "maxopenrisk",
-        "positionsize",
-        "riskamount",
-        "riskbudget",
-        "riskpct",
-        "riskpercent",
-        "riskpercentage",
-        "riskpertrade",
-        "riskpolicy",
-        "userriskpolicy",
-    }
-)
-_RISK_POLICY_TOKENS = frozenset(
-    {
-        "amount",
-        "budget",
-        "capital",
-        "max",
-        "money",
-        "open",
-        "pct",
-        "percent",
-        "percentage",
-        "policy",
-        "trade",
-    }
-)
-
 ParameterValue = bool | int | float | str
 
 
@@ -205,16 +136,11 @@ class ParameterSpec(_ContractModel):
 
     @model_validator(mode="after")
     def validate_parameter(self) -> Self:
-        tokens = frozenset(self.name.split("_"))
-        compact = self.name.replace("_", "")
-        describes_user_risk = "risk" in tokens and bool(tokens & _RISK_POLICY_TOKENS)
-        if (
-            self.name in _FORBIDDEN_PARAMETER_NAMES
-            or bool(tokens & _FORBIDDEN_PARAMETER_TOKENS)
-            or compact in _FORBIDDEN_COMPACT_NAMES
-            or describes_user_risk
-        ):
-            raise ValueError("strategy parameters cannot define account or user risk policy")
+        if is_forbidden_strategy_data_name(self.name):
+            raise ValueError(
+                "strategy parameters cannot define account or user risk policy, "
+                "credentials, or execution sizing"
+            )
 
         default_matches_kind = (
             (self.kind is ParameterType.BOOLEAN and type(self.default) is bool)
@@ -230,7 +156,10 @@ class ParameterSpec(_ContractModel):
                 raise ValueError("only numeric parameters can declare minimum or maximum")
             return self
 
-        numeric_default = float(self.default)
+        try:
+            numeric_default = float(self.default)
+        except OverflowError as error:
+            raise ValueError("numeric defaults must be finite") from error
         if not math.isfinite(numeric_default):
             raise ValueError("numeric defaults must be finite")
         if self.minimum is not None and not math.isfinite(self.minimum):
@@ -277,7 +206,7 @@ class DependencySpec(_ContractModel):
         normalized = tuple(value.lower() for value in hashes)
         if len(set(normalized)) != len(normalized):
             raise ValueError("dependency hashes must be unique")
-        return normalized
+        return tuple(sorted(normalized))
 
 
 class BoundedLossSpec(_ContractModel):
@@ -323,6 +252,23 @@ class StrategySpec(_ContractModel):
     dependencies: tuple[DependencySpec, ...] = ()
     disclosures: Annotated[tuple[NonEmptyText, ...], Field(min_length=1)]
     bounded_loss: BoundedLossSpec
+
+    @field_validator("subscriptions")
+    @classmethod
+    def order_subscriptions(
+        cls, values: tuple[BarSubscription, ...]
+    ) -> tuple[BarSubscription, ...]:
+        return tuple(sorted(values, key=lambda item: item.key))
+
+    @field_validator("warmup")
+    @classmethod
+    def order_warmup(cls, values: tuple[WarmupRequirement, ...]) -> tuple[WarmupRequirement, ...]:
+        return tuple(sorted(values, key=lambda item: item.subscription.key))
+
+    @field_validator("dependencies")
+    @classmethod
+    def order_dependencies(cls, values: tuple[DependencySpec, ...]) -> tuple[DependencySpec, ...]:
+        return tuple(sorted(values, key=lambda item: (item.name, item.version)))
 
     @field_serializer("required_capabilities")
     def serialize_capabilities(self, values: frozenset[Capability]) -> tuple[str, ...]:

@@ -39,7 +39,7 @@ class Timeframe(StrEnum):
 
     @property
     def minutes(self) -> int:
-        """Return a nominal duration used only for deterministic ordering."""
+        """Return the fixed duration used for ordering and non-monthly freshness checks."""
         return _TIMEFRAME_MINUTES[self]
 
 

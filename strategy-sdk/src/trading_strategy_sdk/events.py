@@ -16,9 +16,14 @@ Price = Annotated[Decimal, Field(gt=0, allow_inf_nan=False)]
 
 
 def _as_utc(value: datetime) -> datetime:
-    if value.tzinfo is None or value.utcoffset() is None:
-        raise ValueError("bar and event times must be timezone-aware UTC values")
-    return value.astimezone(UTC)
+    try:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("bar and event times must be timezone-aware UTC values")
+        return value.astimezone(UTC)
+    except Exception as error:
+        raise ValueError(
+            "bar and event times must be representable timezone-aware UTC values"
+        ) from error
 
 
 class OHLC(_ContractModel):
@@ -81,10 +86,15 @@ class BarClosedEvent(_ContractModel):
         return self
 
     @property
-    def sort_key(self) -> tuple[datetime, str, int]:
-        """Return a structural tie-breaker independent of ingestion order."""
+    def identity_key(self) -> tuple[datetime, str, int]:
+        """Return the stable bar identity, independent of delayed delivery."""
         subscription = self.bar.subscription
-        return (self.event_time, subscription.symbol.value, subscription.timeframe.minutes)
+        return (self.bar.close_time, subscription.symbol.value, subscription.timeframe.minutes)
+
+    @property
+    def sort_key(self) -> tuple[datetime, str, int]:
+        """Return the deterministic event-ordering key."""
+        return self.identity_key
 
 
 def ordered_events(events: Iterable[BarClosedEvent]) -> tuple[BarClosedEvent, ...]:
