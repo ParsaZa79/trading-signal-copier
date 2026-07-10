@@ -1,0 +1,22 @@
+name: trading-platform-mail-local
+
+services:
+  mailpit:
+    image: axllent/mailpit:v1.30.0@sha256:0059ef81e492a7192af3816281eed6859eb078bd7bdc58b76757c13e10e53a7d
+    restart: unless-stopped
+    ports:
+      - name: mailpit-ui
+        target: 8025
+        published: "8025"
+        host_ip: 127.0.0.1
+        protocol: tcp
+    expose:
+      - "1025"
+    networks:
+      - mailpit-local
+    labels:
+      traefik.enable: "false"
+
+networks:
+  mailpit-local:
+    internal: true

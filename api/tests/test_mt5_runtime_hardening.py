@@ -1,0 +1,121 @@
+from __future__ import annotations
+
+import json
+import os
+import subprocess
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+MT5 = REPO_ROOT / "mt5"
+IMAGE = "trading-platform/mt5-rpyc:6.0.2"
+NETWORK = "trading-mt5-api"
+
+
+def _write_executable(path: Path, content: str) -> None:
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def test_start_linux_rejects_an_existing_unmanaged_mt5_container(tmp_path: Path) -> None:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    calls = tmp_path / "docker.calls"
+    _write_executable(
+        fake_bin / "docker",
+        f"""#!/bin/sh
+printf '%s\\n' "$*" >> {calls}
+if [ "$1" = ps ]; then printf '%s\\n' mt5; fi
+""",
+    )
+    for command in ("uv", "npm"):
+        _write_executable(fake_bin / command, "#!/bin/sh\nexit 0\n")
+
+    result = subprocess.run(
+        ["bash", str(REPO_ROOT / "start-linux.sh")],
+        cwd=REPO_ROOT,
+        env={**os.environ, "PATH": f"{fake_bin}:{os.environ['PATH']}"},
+        text=True,
+        capture_output=True,
+        timeout=10,
+    )
+
+    assert result.returncode != 0
+    assert "refusing" in (result.stdout + result.stderr).lower()
+    assert "remove" in (result.stdout + result.stderr).lower()
+    assert calls.read_text(encoding="utf-8").splitlines() == ["ps -a --format {{.Names}}"]
+
+
+def _compose_config(file: Path) -> dict:
+    result = subprocess.run(
+        ["docker", "compose", "-f", str(file), "config", "--format", "json"],
+        cwd=REPO_ROOT,
+        env={**os.environ, "MT5_VNC_PASSWORD": "test-only"},
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return json.loads(result.stdout)
+
+
+def test_effective_local_bindings_are_loopback_only_and_exact_image() -> None:
+    config = _compose_config(MT5 / "compose.local.yaml")
+    service = config["services"]["mt5"]
+
+    assert service["image"] == IMAGE
+    assert service.get("network_mode") != "host"
+    assert {
+        (port["target"], port["published"], port["host_ip"])
+        for port in service["ports"]
+    } == {(3000, "3000", "127.0.0.1"), (8001, "8001", "127.0.0.1")}
+
+
+def test_effective_production_network_is_dedicated_and_rpyc_is_not_published() -> None:
+    config = _compose_config(MT5 / "compose.yaml")
+    service = config["services"]["mt5"]
+
+    assert service["image"] == IMAGE
+    assert set(service["networks"]) == {NETWORK}
+    assert all(port["target"] != 8001 for port in service.get("ports", []))
+    assert config["networks"][NETWORK]["name"] == NETWORK
+    assert config["networks"][NETWORK]["external"] is True
+    assert "dokploy-network" not in json.dumps(config)
+
+
+def test_network_provisioner_requires_internal_attachable_network() -> None:
+    provisioner = MT5 / "ensure-production-network.sh"
+    assert provisioner.is_file()
+    source = provisioner.read_text(encoding="utf-8")
+    assert "--driver overlay" in source
+    assert "--internal" in source
+    assert "--attachable" in source
+    assert NETWORK in source
+    assert "docker network inspect" in source
+
+
+def test_exact_patch_mismatch_is_executable_and_fail_closed(tmp_path: Path) -> None:
+    script = (MT5 / "patch-start.py").read_text(encoding="utf-8")
+    script = script.replace('START = Path("/Metatrader/start.sh")', 'START = Path("start.sh")')
+    (tmp_path / "patch-start.py").write_text(script, encoding="utf-8")
+    (tmp_path / "start.sh").write_text("unexpected upstream patch level\n", encoding="utf-8")
+
+    result = subprocess.run(
+        ["python3", "patch-start.py"], cwd=tmp_path, text=True, capture_output=True
+    )
+
+    assert result.returncode != 0
+    assert "did not match pinned upstream exactly" in result.stderr
+    patched_source = (tmp_path / "start.sh").read_text(encoding="utf-8")
+    assert patched_source == "unexpected upstream patch level\n"
+
+
+def test_compose_volume_identity_persists_across_recreate() -> None:
+    for compose_file, expected in (
+        (MT5 / "compose.local.yaml", "trading-mt5-config-local"),
+        (MT5 / "compose.yaml", "trading-mt5-config"),
+    ):
+        config = _compose_config(compose_file)
+        mount = config["services"]["mt5"]["volumes"][0]
+        assert mount["type"] == "volume"
+        assert mount["target"] == "/config"
+        assert mount["source"] in config["volumes"]
+        assert config["volumes"][mount["source"]]["name"] == expected

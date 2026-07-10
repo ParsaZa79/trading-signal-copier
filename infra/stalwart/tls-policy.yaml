@@ -1,0 +1,16 @@
+primary:
+  implementation: stalwart-v0.16
+  hostname: mail.kiaparsaprintingmoneymachine.cloud
+  challenge: dns-01
+  dns_provider: hostinger
+  acme_directory: https://acme-v02.api.letsencrypt.org/directory
+  requires_host_ports: []
+  default_certificate_required: true
+external_acme_fallback:
+  fullchain: /run/stalwart-tls/fullchain.pem
+  private_key: /run/stalwart-tls/privkey.pem
+  mount_read_only: true
+  default_certificate_required: true
+  default_certificate_field: SystemSettings.defaultCertificateId
+  runtime_default_probe: smtp-starttls-no-sni
+  reload_action: Action/ReloadTlsCertificates

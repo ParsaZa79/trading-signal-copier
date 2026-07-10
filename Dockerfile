@@ -30,6 +30,8 @@ WORKDIR /app/api
 RUN uv sync --frozen --no-dev
 
 COPY api/src/ ./src/
+COPY api/alembic.ini ./alembic.ini
+COPY api/alembic/ ./alembic/
 
 RUN mkdir -p /app/data
 VOLUME ["/app/data"]
@@ -51,9 +53,11 @@ COPY dashboard/ .
 ARG NEXT_PUBLIC_API_URL=https://api.kiaparsaprintingmoneymachine.cloud
 ARG NEXT_PUBLIC_WS_URL=wss://api.kiaparsaprintingmoneymachine.cloud/ws
 ARG NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ARG NEXT_PUBLIC_STRATEGY_LAB_ENABLED=false
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_WS_URL=$NEXT_PUBLIC_WS_URL
 ENV NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+ENV NEXT_PUBLIC_STRATEGY_LAB_ENABLED=$NEXT_PUBLIC_STRATEGY_LAB_ENABLED
 RUN bun run build
 
 ENV NODE_ENV=production

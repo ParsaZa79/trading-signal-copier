@@ -5,7 +5,7 @@
 # Usage: ./start-linux.sh
 #
 # Starts all three services:
-#   1. MT5 Docker container (gmag11/metatrader5_vnc) on ports 3000 + 8001
+#   1. Hardened MT5 Docker on loopback-only ports 3000 + 8001
 #   2. Trading API (FastAPI) on port 8000
 #   3. Dashboard (Next.js) on port 3001 (3000 is taken by MT5 VNC)
 #
@@ -19,8 +19,8 @@ API_DIR="$SCRIPT_DIR/api"
 DASHBOARD_DIR="$SCRIPT_DIR/dashboard"
 DASHBOARD_PORT=3001
 
-# Docker compose file for MT5 (external repo)
-MT5_COMPOSE="${MT5_DOCKER_COMPOSE:-$SCRIPT_DIR/../metatrader5-docker/docker-compose.yaml}"
+# Hardened local MT5 compose; override only with an equally isolated compose file.
+MT5_COMPOSE="${MT5_DOCKER_COMPOSE:-$SCRIPT_DIR/mt5/compose.local.yaml}"
 
 # Colors
 RED='\033[0;31m'
@@ -109,20 +109,19 @@ echo -e "  ${GREEN}docker, uv, $PKG_MGR${NC} — all found"
 echo ""
 echo -e "${BOLD}[1/3] MT5 Docker container${NC}"
 
-if docker ps --format '{{.Names}}' 2>/dev/null | grep -q '^mt5$'; then
-    echo -e "  ${GREEN}Already running${NC}"
+if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^mt5$'; then
+    echo -e "  ${RED}Refusing to use the existing 'mt5' container.${NC}"
+    echo -e "  ${RED}Remove or explicitly migrate it first: docker rm -f mt5${NC}"
+    echo -e "  ${RED}This fail-closed rule prevents legacy image, port, network, and RPyC drift.${NC}"
+    exit 1
 else
-    if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q '^mt5$'; then
-        echo -e "  ${CYAN}Starting existing container...${NC}"
-        docker start mt5 >/dev/null 2>&1
-    elif [[ -f "$MT5_COMPOSE" ]]; then
+    if [[ -f "$MT5_COMPOSE" ]]; then
         echo -e "  ${CYAN}Starting via docker compose...${NC}"
-        docker compose -f "$MT5_COMPOSE" up -d 2>&1 | sed 's/^/  /'
+        docker compose -f "$MT5_COMPOSE" up -d --build 2>&1 | sed 's/^/  /'
     else
-        echo -e "  ${CYAN}Pulling and starting gmag11/metatrader5_vnc...${NC}"
-        docker run -d --name mt5 \
-            -p 3000:3000 -p 8001:8001 \
-            gmag11/metatrader5_vnc 2>&1 | sed 's/^/  /'
+        echo -e "  ${RED}Hardened MT5 compose file not found: $MT5_COMPOSE${NC}"
+        echo -e "  ${RED}Refusing to publish an unauthenticated RPyC Classic service.${NC}"
+        exit 1
     fi
 
     echo -e "  ${CYAN}Waiting for MT5 RPyC server (port 8001)...${NC}"

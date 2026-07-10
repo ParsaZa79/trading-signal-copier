@@ -1,0 +1,19 @@
+[
+  {
+    "name": "api-liveness",
+    "url": "https://api.kiaparsaprintingmoneymachine.cloud/",
+    "response": {
+      "type": "json-field",
+      "field": "name",
+      "equals": "Trading Dashboard API"
+    }
+  },
+  {
+    "name": "dashboard-liveness",
+    "url": "https://dashboard.kiaparsaprintingmoneymachine.cloud/",
+    "response": {
+      "type": "contains",
+      "value": "Signal Copier"
+    }
+  }
+]

@@ -1,0 +1,23 @@
+runtime_ownership:
+  stalwart:
+    manager: standalone-docker-compose
+    compose_project: trading-platform-mail
+  dashboard:
+    manager: dokploy-application
+    application_id: lku4v_DVjO_BEJSSQgBZi
+network:
+  name: trading-platform-mail
+  driver: overlay
+  attachable: true
+  internal: false
+allowed_members:
+  - role: stalwart
+    compose_service: stalwart
+    alias: stalwart
+  - role: dashboard
+    dokploy_application_id: lku4v_DVjO_BEJSSQgBZi
+    alias: trading-dashboard
+explicitly_forbidden_roles:
+  - api
+  - mt5
+  - traefik

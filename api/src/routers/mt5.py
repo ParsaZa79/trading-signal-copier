@@ -60,7 +60,8 @@ async def list_mt5_broker_servers() -> MT5BrokerServersResponse:
     MetaTrader does not expose broker discovery through the Python API, so this
     combines a seed catalog with servers learned from successful logins.
     """
-    return MT5BrokerServersResponse(success=True, brokers=list_broker_servers())
+    brokers = [MT5BrokerServer.model_validate(item) for item in list_broker_servers()]
+    return MT5BrokerServersResponse(success=True, brokers=brokers)
 
 
 @router.post("/connect", response_model=MT5ConnectResponse)

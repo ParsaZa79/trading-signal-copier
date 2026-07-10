@@ -44,6 +44,34 @@ def _config_int(name: str, default: int) -> int:
         return default
 
 
+def _config_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass
+class FeatureFlags:
+    """Dark-launch controls for Strategy Lab capabilities."""
+
+    strategy_lab_enabled: bool = field(
+        default_factory=lambda: _config_bool("STRATEGY_LAB_ENABLED")
+    )
+    open_signup_enabled: bool = field(
+        default_factory=lambda: _config_bool("OPEN_SIGNUP_ENABLED")
+    )
+    codex_builder_enabled: bool = field(
+        default_factory=lambda: _config_bool("CODEX_BUILDER_ENABLED")
+    )
+    paper_live_enabled: bool = field(
+        default_factory=lambda: _config_bool("PAPER_LIVE_ENABLED")
+    )
+    public_strategy_publishing_enabled: bool = field(
+        default_factory=lambda: _config_bool("PUBLIC_STRATEGY_PUBLISHING_ENABLED")
+    )
+
+
 @dataclass
 class MT5Config:
     """MT5 connection configuration."""
@@ -87,6 +115,7 @@ class Config:
     mt5: MT5Config = field(default_factory=MT5Config)
     api: APIConfig = field(default_factory=APIConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
+    features: FeatureFlags = field(default_factory=FeatureFlags)
 
     # Path to bot state file
     bot_state_file: str = field(

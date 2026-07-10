@@ -1,0 +1,15 @@
+[project]
+name = "trading-signal-copier-infra-tests"
+version = "0.0.0"
+description = "Hermetic dependencies for infrastructure contract tests"
+requires-python = ">=3.12"
+dependencies = [
+    "pytest==9.1.1",
+    "PyYAML==6.0.3",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
