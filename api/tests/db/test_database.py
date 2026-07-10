@@ -1,5 +1,6 @@
 import asyncio
 import os
+from io import StringIO
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -16,6 +17,7 @@ from src.db import session as db_session
 from src.db.base import APP_SCHEMA, Base, include_app_schema_name
 
 API_ROOT = Path(__file__).resolve().parents[2]
+REPOSITORY_ROOT = API_ROOT.parent
 
 
 def _test_database_url() -> str:
@@ -85,6 +87,20 @@ def test_database_engine_enables_pool_health_and_timeout(
             },
         )
     ]
+
+
+async def test_session_scope_commits_on_success() -> None:
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session_context = MagicMock()
+    session_context.__aenter__ = AsyncMock(return_value=session)
+    session_context.__aexit__ = AsyncMock(return_value=False)
+    session_factory = MagicMock(return_value=session_context)
+
+    async with db_session.session_scope(session_factory) as yielded_session:
+        assert yielded_session is session
+
+    session.commit.assert_awaited_once_with()
 
 
 async def test_session_scope_rolls_back_and_reraises() -> None:
@@ -164,6 +180,27 @@ async def test_database_health_reports_timeout(monkeypatch: pytest.MonkeyPatch) 
 
     assert response["status"] == "unhealthy"
     assert response.get("error") == "timeout"
+
+
+def test_alembic_revision_template_and_production_artifact_exist() -> None:
+    template = API_ROOT / "alembic/script.py.mako"
+    assert template.is_file()
+    assert "${up_revision}" in template.read_text(encoding="utf-8")
+
+    dockerfile = (REPOSITORY_ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "COPY api/alembic.ini ./alembic.ini" in dockerfile
+    assert "COPY api/alembic/ ./alembic/" in dockerfile
+
+
+def test_alembic_version_table_is_explicitly_public(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql://app_user@localhost/strategy_lab")
+    alembic_config = AlembicConfig(API_ROOT / "alembic.ini")
+    output = StringIO()
+    alembic_config.output_buffer = output
+
+    command.upgrade(alembic_config, "head", sql=True)
+
+    assert "CREATE TABLE public.alembic_version" in output.getvalue()
 
 
 def test_initial_migration_only_manages_app_schema(monkeypatch: pytest.MonkeyPatch) -> None:

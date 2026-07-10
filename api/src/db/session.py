@@ -62,3 +62,5 @@ async def session_scope(
         except BaseException:
             await session.rollback()
             raise
+        else:
+            await session.commit()

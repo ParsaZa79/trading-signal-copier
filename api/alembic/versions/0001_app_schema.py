@@ -7,7 +7,8 @@ Revises:
 from sqlalchemy.schema import CreateSchema, DropSchema
 
 from alembic import op
-from src.db.base import APP_SCHEMA
+
+APP_SCHEMA = "app"
 
 revision: str = "0001_app_schema"
 down_revision: str | None = None

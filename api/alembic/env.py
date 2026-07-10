@@ -29,6 +29,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         include_schemas=True,
         include_name=include_app_schema_name,
+        version_table_schema="public",
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
@@ -43,6 +44,7 @@ def _run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         include_schemas=True,
         include_name=include_app_schema_name,
+        version_table_schema="public",
     )
 
     with context.begin_transaction():

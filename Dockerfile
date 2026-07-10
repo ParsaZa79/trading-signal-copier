@@ -30,6 +30,8 @@ WORKDIR /app/api
 RUN uv sync --frozen --no-dev
 
 COPY api/src/ ./src/
+COPY api/alembic.ini ./alembic.ini
+COPY api/alembic/ ./alembic/
 
 RUN mkdir -p /app/data
 VOLUME ["/app/data"]
