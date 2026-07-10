@@ -85,6 +85,7 @@ def test_network_provisioner_requires_internal_attachable_network() -> None:
     provisioner = MT5 / "ensure-production-network.sh"
     assert provisioner.is_file()
     source = provisioner.read_text(encoding="utf-8")
+    assert "--driver overlay" in source
     assert "--internal" in source
     assert "--attachable" in source
     assert NETWORK in source
