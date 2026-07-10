@@ -1,0 +1,35 @@
+name: trading-platform-mail
+
+services:
+  stalwart:
+    image: stalwartlabs/stalwart:v0.16@sha256:b30c99ed8240ea42612f784babe0388318d5c3668a77873efe7e3b1147e2226e
+    hostname: mail.kiaparsaprintingmoneymachine.cloud
+    restart: unless-stopped
+    init: true
+    ports:
+      - name: smtp
+        target: 25
+        published: "25"
+        protocol: tcp
+    expose:
+      - "587"
+    volumes:
+      - stalwart-config:/etc/stalwart
+      - stalwart-data:/var/lib/stalwart
+    networks:
+      mail-private:
+        aliases:
+          - stalwart
+    labels:
+      traefik.enable: "false"
+
+networks:
+  mail-private:
+    external: true
+    name: trading-platform-mail
+
+volumes:
+  stalwart-config:
+    name: trading-platform-mail-stalwart-config
+  stalwart-data:
+    name: trading-platform-mail-stalwart-data

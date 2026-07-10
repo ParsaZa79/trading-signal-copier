@@ -1,0 +1,12 @@
+services:
+  stalwart:
+    volumes:
+      - type: volume
+        source: stalwart-tls
+        target: /run/stalwart-tls
+        read_only: true
+
+volumes:
+  stalwart-tls:
+    external: true
+    name: trading-platform-mail-stalwart-tls

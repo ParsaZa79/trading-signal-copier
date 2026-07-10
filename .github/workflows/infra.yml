@@ -1,0 +1,57 @@
+name: Infra verification
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/infra.yml"
+      - "infra/**"
+      - "api/pyproject.toml"
+      - "api/uv.lock"
+      - "api/src/config.py"
+      - "api/tests/test_feature_flags.py"
+  push:
+    paths:
+      - ".github/workflows/infra.yml"
+      - "infra/**"
+      - "api/pyproject.toml"
+      - "api/uv.lock"
+      - "api/src/config.py"
+      - "api/tests/test_feature_flags.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infra-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Parsed and mocked infra contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.28"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: |
+            infra/uv.lock
+            api/uv.lock
+
+      - name: Verify required static tools
+        run: |
+          shellcheck --version
+          docker compose version
+
+      - name: Run infrastructure verification
+        run: ./infra/test.sh

@@ -1,0 +1,10 @@
+{
+  "certificate": {
+    "@type": "File",
+    "filePath": "/run/stalwart-tls/fullchain.pem"
+  },
+  "privateKey": {
+    "@type": "File",
+    "filePath": "/run/stalwart-tls/privkey.pem"
+  }
+}

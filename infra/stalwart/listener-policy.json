@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "required": [
+    {
+      "name": "smtp",
+      "protocol": "smtp",
+      "bind": ["[::]:25"],
+      "ports": [25],
+      "useTls": true,
+      "tlsImplicit": false
+    },
+    {
+      "name": "submission",
+      "protocol": "smtp",
+      "bind": ["[::]:587"],
+      "ports": [587],
+      "useTls": true,
+      "tlsImplicit": false
+    }
+  ],
+  "forbiddenPorts": [24, 80, 110, 143, 443, 465, 993, 995, 4190, 8080],
+  "forbiddenProtocols": ["http", "imap", "pop3", "manageSieve", "lmtp"]
+}

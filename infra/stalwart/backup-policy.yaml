@@ -1,0 +1,18 @@
+schedule: "15 2 * * *"
+timezone: UTC
+consistency: stopped-container-or-storage-snapshot
+sources:
+  - trading-platform-mail-stalwart-config
+  - trading-platform-mail-stalwart-data
+retention:
+  daily: 7
+  weekly: 5
+  monthly: 12
+off_host:
+  client_side_encryption: true
+  object_lock: true
+  separate_credentials: true
+restore_test:
+  frequency: quarterly
+  rpo_hours: 24
+  rto_hours: 4
