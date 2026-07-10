@@ -46,7 +46,6 @@
     "vitest": "4.1.10"
   },
   "overrides": {
-    "picomatch": "2.3.2",
     "postcss": "8.5.16"
   },
   "ignoreScripts": [
