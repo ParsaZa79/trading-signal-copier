@@ -17,6 +17,7 @@ from ..access_store import (
 )
 from ..clerk_client import clerk_enabled, create_clerk_invitation
 from ..security import get_current_user
+from ..session_payload import build_session_payload
 
 router = APIRouter()
 current_user_dependency = Depends(get_current_user)
@@ -31,6 +32,11 @@ class InviteMemberRequest(BaseModel):
 class UpdateMemberRequest(BaseModel):
     role: Literal["owner", "admin", "trader", "viewer"] | None = None
     status: Literal["active", "disabled", "pending"] | None = None
+
+
+@router.get("/me")
+async def me(current_user: dict = current_user_dependency) -> dict:
+    return build_session_payload(current_user)
 
 
 @router.get("")
