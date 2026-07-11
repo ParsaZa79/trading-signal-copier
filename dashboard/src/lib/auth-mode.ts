@@ -20,7 +20,12 @@ export function resolvePublicAuthConfig(environment: PublicEnvironment) {
   } as const;
 }
 
-export const AUTH_CONFIG = resolvePublicAuthConfig(process.env);
+export const AUTH_CONFIG = resolvePublicAuthConfig({
+  NEXT_PUBLIC_BETTER_AUTH_ENABLED: process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED,
+  NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+  NEXT_PUBLIC_OPEN_SIGNUP_ENABLED: process.env.NEXT_PUBLIC_OPEN_SIGNUP_ENABLED,
+  NEXT_PUBLIC_TURNSTILE_SITE_KEY: process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY,
+});
 export const AUTH_MODE = AUTH_CONFIG.mode;
 export const BETTER_AUTH_ENABLED = AUTH_MODE === "better-auth";
 export const CLERK_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY || "";
