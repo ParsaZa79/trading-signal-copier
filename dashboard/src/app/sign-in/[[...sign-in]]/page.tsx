@@ -1,10 +1,14 @@
 "use client";
 
 import { SignIn } from "@clerk/nextjs";
-import { CLERK_ENABLED } from "@/lib/auth-mode";
+import { AUTH_MODE } from "@/lib/auth-mode";
+import { BetterAuthSignIn } from "@/components/auth/better-auth-sign-in";
 
 export default function SignInPage() {
-  if (!CLERK_ENABLED) {
+  if (AUTH_MODE === "better-auth") {
+    return <BetterAuthSignIn />;
+  }
+  if (AUTH_MODE !== "clerk") {
     return <AuthNotConfigured />;
   }
 

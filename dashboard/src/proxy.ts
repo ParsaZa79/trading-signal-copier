@@ -1,24 +1,35 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { getSessionCookie } from "better-auth/cookies";
+import { NextRequest, NextResponse } from "next/server";
+import { AUTH_MODE } from "./lib/auth-mode";
+import { betterAuthRouteDecision } from "./lib/proxy-policy";
 
-const clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY);
-const isPublicRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
+const isPublicClerkRoute = createRouteMatcher(["/sign-in(.*)", "/sign-up(.*)"]);
 
-export default clerkEnabled
-  ? clerkMiddleware(
-      async (auth, req) => {
-        if (!isPublicRoute(req)) {
-          await auth.protect();
-        }
-      },
-      {
-        signInUrl: "/sign-in",
-        signUpUrl: "/sign-up",
-      }
-    )
-  : function proxy() {
-      return NextResponse.next();
-    };
+const clerkProxy = clerkMiddleware(
+  async (auth, req) => {
+    if (!isPublicClerkRoute(req)) await auth.protect();
+  },
+  { signInUrl: "/sign-in", signUpUrl: "/sign-up" },
+);
+
+function betterAuthProxy(request: NextRequest) {
+  const decision = betterAuthRouteDecision(
+    request.nextUrl,
+    Boolean(getSessionCookie(request)),
+  );
+  return decision.action === "next"
+    ? NextResponse.next()
+    : NextResponse.redirect(decision.location);
+}
+
+export default AUTH_MODE === "better-auth"
+  ? betterAuthProxy
+  : AUTH_MODE === "clerk"
+    ? clerkProxy
+    : function legacyLocalProxy() {
+        return NextResponse.next();
+      };
 
 export const config = {
   matcher: [

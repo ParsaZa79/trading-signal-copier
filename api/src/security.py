@@ -10,11 +10,14 @@ import os
 import secrets
 import time
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+import jwt
 from fastapi import Depends, Header, HTTPException, Request, WebSocket, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from jwt import PyJWKClient
 
 from .clerk_client import clerk_enabled, get_clerk_user_email, verify_clerk_token
 from .runtime_data import DATA_DIR
@@ -25,6 +28,77 @@ PASSWORD_ITERATIONS = 390_000
 TOKEN_TTL_SECONDS = int(os.getenv("AUTH_TOKEN_TTL_SECONDS", str(7 * 24 * 60 * 60)))
 
 _bearer = HTTPBearer(auto_error=False)
+BETTER_AUTH_ROLES = {"owner", "admin", "trader", "viewer"}
+
+
+def better_auth_enabled() -> bool:
+    return os.getenv("BETTER_AUTH_ENABLED", "").strip().lower() == "true"
+
+
+@lru_cache(maxsize=4)
+def _better_auth_jwk_client(jwks_url: str) -> PyJWKClient:
+    return PyJWKClient(jwks_url, timeout=10, cache_keys=True)
+
+
+def verify_better_auth_token(token: str) -> dict[str, Any] | None:
+    if not better_auth_enabled() or not token:
+        return None
+    issuer = os.getenv("BETTER_AUTH_ISSUER", "").strip().rstrip("/")
+    audience = os.getenv("BETTER_AUTH_AUDIENCE", "").strip().rstrip("/")
+    jwks_url = os.getenv("BETTER_AUTH_JWKS_URL", "").strip()
+    if not issuer or not audience or not jwks_url.startswith("https://"):
+        return None
+    try:
+        signing_key = _better_auth_jwk_client(jwks_url).get_signing_key_from_jwt(token)
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=issuer,
+            audience=audience,
+            options={"require": ["exp", "iat", "iss", "aud", "sub"]},
+        )
+    except Exception:
+        return None
+    subject = claims.get("sub")
+    email = claims.get("email")
+    role = claims.get("role")
+    if (
+        not isinstance(subject, str)
+        or not subject
+        or not isinstance(email, str)
+        or "@" not in email
+        or claims.get("email_verified") is not True
+        or role not in BETTER_AUTH_ROLES
+    ):
+        return None
+    return claims
+
+
+def _better_auth_user_from_token(token: str | None) -> dict[str, Any] | None:
+    claims = verify_better_auth_token(token or "")
+    if not claims:
+        return None
+    from .access_store import resolve_better_auth_member
+
+    member = resolve_better_auth_member(str(claims["sub"]), str(claims["email"]).lower())
+    if member.get("status") != "active":
+        return None
+    member["auth_provider"] = "better-auth"
+    member["session_id"] = None
+    return member
+
+
+def _user_from_bearer_token(token: str | None) -> dict[str, Any] | None:
+    if better_auth_enabled():
+        return _better_auth_user_from_token(token)
+    clerk_user = _clerk_user_from_token(token)
+    if clerk_user is not None:
+        return clerk_user
+    payload = decode_token(token or "")
+    if not payload:
+        return None
+    return get_user(str(payload.get("sub", "")))
 
 
 def _utc_now() -> str:
@@ -285,6 +359,8 @@ def _clerk_user_from_proxy_headers(headers: Any) -> dict[str, Any] | None:
 
     clerk_user_id = str(headers.get("x-clerk-user-id") or "")
     if not clerk_user_id:
+        if better_auth_enabled():
+            return None
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
@@ -319,19 +395,8 @@ async def get_current_user(
     if token is None:
         token = request.cookies.get("sc_session")
 
-    clerk_user = _clerk_user_from_token(token)
-    if clerk_user is not None:
-        return clerk_user
-
-    payload = decode_token(token or "")
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
-
-    user = get_user(str(payload.get("sub", "")))
-    if not user:
+    user = _user_from_bearer_token(token)
+    if user is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
@@ -345,15 +410,7 @@ def current_user_for_websocket(websocket: WebSocket) -> dict[str, Any] | None:
         token = _token_from_authorization_header(websocket.headers.get("authorization"))
     if not token:
         token = websocket.cookies.get("sc_session")
-
-    clerk_user = _clerk_user_from_token(token)
-    if clerk_user is not None:
-        return clerk_user
-
-    payload = decode_token(token or "")
-    if not payload:
-        return None
-    return get_user(str(payload.get("sub", "")))
+    return _user_from_bearer_token(token)
 
 
 async def get_requested_account_id(

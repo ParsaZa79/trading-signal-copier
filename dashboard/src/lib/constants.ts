@@ -1,4 +1,4 @@
-import { CLERK_ENABLED } from "./auth-mode";
+import { AUTH_MODE } from "./auth-mode";
 
 // API configuration
 // Default to production URLs. In standalone builds, NEXT_PUBLIC_* env vars
@@ -6,7 +6,7 @@ import { CLERK_ENABLED } from "./auth-mode";
 // is the production URL. In dev mode, env vars work normally via .env.local.
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "https://api.kiaparsaprintingmoneymachine.cloud";
-export const REST_API_URL = CLERK_ENABLED ? "" : API_URL;
+export const REST_API_URL = AUTH_MODE === "local" ? API_URL : "";
 export const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL || "wss://api.kiaparsaprintingmoneymachine.cloud/ws";
 
