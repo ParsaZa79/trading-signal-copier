@@ -123,13 +123,15 @@ export async function login(email: string, password: string): Promise<AuthSessio
   return session;
 }
 
+export const AUTH_SESSION_ENDPOINT = "/api/access/me";
+
 export async function getMe(): Promise<AuthSession> {
   const response = await fetchApi<{
     user: AuthSession["user"];
     accounts: DashboardAccount[];
     active_account_id: string | null;
     setup_complete?: boolean;
-  }>("/api/auth/me");
+  }>(AUTH_SESSION_ENDPOINT);
   const existing = await getApiToken();
   if (!existing) {
     throw new Error("Authentication required");
