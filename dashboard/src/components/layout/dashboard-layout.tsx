@@ -15,14 +15,15 @@ import {
   getSymbolPrice,
   logout,
 } from "@/lib/api";
-import { CLERK_ENABLED } from "@/lib/auth-mode";
+import { BETTER_AUTH_ENABLED, CLERK_ENABLED } from "@/lib/auth-mode";
+import { authClient, getBetterAuthJwt } from "@/lib/auth-client";
 import {
   clearStoredSession,
   getStoredSession,
   storeSession,
   type AuthSession,
 } from "@/lib/auth-storage";
-import { setClerkTokenProvider } from "@/lib/clerk-token";
+import { setBetterAuthTokenProvider, setClerkTokenProvider } from "@/lib/clerk-token";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
@@ -75,6 +76,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (CLERK_ENABLED) {
     return <ClerkDashboardLayout>{children}</ClerkDashboardLayout>;
+  }
+
+  if (BETTER_AUTH_ENABLED) {
+    return <BetterAuthDashboardLayout>{children}</BetterAuthDashboardLayout>;
   }
 
   return <LocalAuthDashboardLayout>{children}</LocalAuthDashboardLayout>;
@@ -151,6 +156,61 @@ function LocalAuthDashboardLayout({ children }: DashboardLayoutProps) {
       {children}
     </AuthenticatedDashboardLayout>
   );
+}
+
+function BetterAuthDashboardLayout({ children }: DashboardLayoutProps) {
+  const { data: authSession, isPending } = authClient.useSession();
+  const [session, setSessionState] = useState<AuthSession | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [accessError, setAccessError] = useState<string | null>(null);
+  const setSession = useCallback((nextSession: AuthSession) => {
+    storeSession(nextSession);
+    setSessionState(nextSession);
+  }, []);
+
+  useEffect(() => {
+    if (isPending) return;
+    if (!authSession) {
+      clearStoredSession();
+      setSessionState(null);
+      setIsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    let latestToken: string | null = null;
+    const resolveToken = async () => {
+      latestToken = (await getBetterAuthJwt()) ?? latestToken;
+      return latestToken;
+    };
+    setBetterAuthTokenProvider(resolveToken);
+    void (async () => {
+      setIsLoading(true);
+      setAccessError(null);
+      try {
+        const token = await resolveToken();
+        if (!token) throw new Error("Authentication required");
+        const refreshed = await getMe();
+        if (!cancelled) setSession({ ...refreshed, token });
+      } catch {
+        clearStoredSession();
+        if (!cancelled) {
+          setSessionState(null);
+          setAccessError("Access not granted");
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      setBetterAuthTokenProvider(null);
+    };
+  }, [authSession, isPending, setSession]);
+
+  if (isPending || isLoading) return <main className="min-h-screen bg-bg-primary flex items-center justify-center"><p className="text-sm text-text-muted">Loading dashboard...</p></main>;
+  if (!authSession) return <ClerkSignedOutScreen />;
+  if (accessError || !session) return <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6"><div className="w-full max-w-md rounded-xl border border-border-subtle bg-bg-secondary p-6"><h1 className="text-xl font-semibold text-text-primary">Access not granted</h1><p className="mt-2 text-sm text-text-muted">Your account is not allowed to access this dashboard.</p><Button className="mt-5" variant="outline" onClick={() => authClient.signOut({ fetchOptions: { onSuccess: () => { window.location.href = "/sign-in"; } } })}>Sign out</Button></div></main>;
+  return <AuthenticatedDashboardLayout session={session} setSession={setSession} onLogout={async () => { await authClient.signOut(); window.location.href = "/sign-in"; }}>{children}</AuthenticatedDashboardLayout>;
 }
 
 function ClerkDashboardLayout({ children }: DashboardLayoutProps) {

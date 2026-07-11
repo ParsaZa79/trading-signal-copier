@@ -3,7 +3,7 @@ export interface DashboardUser {
   email: string;
   role?: "owner" | "admin" | "trader" | "viewer";
   status?: "active" | "disabled" | "pending";
-  auth_provider?: "local" | "clerk";
+  auth_provider?: "local" | "clerk" | "better-auth";
   active_account_id?: string | null;
   created_at?: string;
 }

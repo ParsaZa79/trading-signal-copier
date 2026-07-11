@@ -1,17 +1,39 @@
 import { getAuthToken } from "./auth-storage";
-import { CLERK_ENABLED } from "./auth-mode";
+import { AUTH_MODE } from "./auth-mode";
 
 type TokenProvider = () => Promise<string | null>;
 
 let clerkTokenProvider: TokenProvider | null = null;
+let betterAuthTokenProvider: TokenProvider | null = null;
 
 export function setClerkTokenProvider(provider: TokenProvider | null) {
   clerkTokenProvider = provider;
 }
 
-export async function getApiToken(): Promise<string | null> {
-  if (CLERK_ENABLED && clerkTokenProvider) {
-    return clerkTokenProvider();
+export function setBetterAuthTokenProvider(provider: TokenProvider | null) {
+  betterAuthTokenProvider = provider;
+}
+
+export async function getApiTokenForMode(
+  mode: typeof AUTH_MODE,
+  providers: {
+    betterAuth?: TokenProvider | null;
+    clerk?: TokenProvider | null;
+    fallback?: TokenProvider;
+  },
+): Promise<string | null> {
+  if (mode === "better-auth") {
+    return providers.betterAuth ? providers.betterAuth() : null;
   }
-  return getAuthToken();
+  if (mode === "clerk") {
+    return providers.clerk ? providers.clerk() : null;
+  }
+  return (providers.fallback ?? getAuthToken)();
+}
+
+export async function getApiToken(): Promise<string | null> {
+  return getApiTokenForMode(AUTH_MODE, {
+    betterAuth: betterAuthTokenProvider,
+    clerk: clerkTokenProvider,
+  });
 }

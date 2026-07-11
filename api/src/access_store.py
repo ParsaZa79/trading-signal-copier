@@ -262,6 +262,27 @@ def resolve_clerk_member(clerk_user_id: str, email: str | None = None) -> dict[s
     return _sanitize_member(member)
 
 
+def resolve_better_auth_member(user_id: str, email: str) -> dict[str, Any]:
+    """Resolve a migrated Better Auth identity without rebinding canonical app ownership."""
+    clean_id = user_id.strip()
+    clean_email = _clean_email(email)
+    if not clean_id or not clean_email:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+
+    store = _load_store()
+    member = store.get("members", {}).get(clean_id)
+    if (
+        not isinstance(member, dict)
+        or str(member.get("id") or "") != clean_id
+        or str(member.get("clerk_user_id") or "") != clean_id
+        or _clean_email(str(member.get("email") or "")) != clean_email
+    ):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
+    if member.get("status") != "active":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
+    return _sanitize_member(member)
+
+
 def set_member_active_account_id(member_id: str, account_id: str | None) -> None:
     store = _load_store()
     member = store["members"].get(member_id)
