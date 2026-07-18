@@ -1,6 +1,6 @@
 """Account router for account info and trade history."""
 
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -69,36 +69,36 @@ async def get_trade_history(
             dt = datetime.fromisoformat(from_date.replace("Z", "+00:00"))
             # If no timezone, assume UTC
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             parsed_from_date = dt
-        except ValueError:
+        except ValueError as error:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid from_date format: {from_date}. Use ISO format (e.g., 2024-01-01)",
-            )
+            ) from error
 
     if to_date:
         try:
             dt = datetime.fromisoformat(to_date.replace("Z", "+00:00"))
             # If no timezone, assume UTC
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             # If only date provided (time is 00:00:00), extend to end of day
             if dt.hour == 0 and dt.minute == 0 and dt.second == 0:
                 dt = dt + timedelta(days=1) - timedelta(seconds=1)
             parsed_to_date = dt
-        except ValueError:
+        except ValueError as error:
             raise HTTPException(
                 status_code=400,
                 detail=f"Invalid to_date format: {to_date}. Use ISO format (e.g., 2024-12-31)",
-            )
+            ) from error
 
     # Get deals from MT5 with date filtering
     # Always extend to_date to now() to include most recent trades
     effective_to_date = parsed_to_date
-    if effective_to_date is None or effective_to_date < datetime.now(timezone.utc):
+    if effective_to_date is None or effective_to_date < datetime.now(UTC):
         # If no to_date or it's in the past relative to now, use now to catch recent trades
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         if effective_to_date is None or now.date() <= effective_to_date.date():
             effective_to_date = now
 
@@ -139,7 +139,6 @@ async def get_trade_history(
             opened_at=deal["time"],  # Using close time as placeholder
             closed_at=deal["time"],
             source="mt5",
-            telegram_msg_id=None,
         )
         for i, deal in enumerate(paginated_deals)
     ]

@@ -25,12 +25,12 @@ from src.repositories.users import (
 API_ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_identity_tables_are_the_second_alembic_revision() -> None:
+def test_copy_marketplace_is_the_current_alembic_revision() -> None:
     scripts = ScriptDirectory.from_config(AlembicConfig(API_ROOT / "alembic.ini"))
     head = scripts.get_revision("head")
     assert head is not None
-    assert head.revision == "0002_identity_accounts"
-    assert head.down_revision == "0001_app_schema"
+    assert head.revision == "0003_copy_marketplace"
+    assert head.down_revision == "0002_identity_accounts"
 
 
 def test_user_profile_is_owned_by_app_schema_without_auth_foreign_key() -> None:

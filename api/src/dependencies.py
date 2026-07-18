@@ -17,7 +17,7 @@ _active_runtime_account_id: str | None = None
 
 
 def set_mt5_executor_factory(factory: Callable[..., Any]) -> None:
-    """Set the concrete MT5Executor factory after direct bot module loading."""
+    """Set the concrete MT5 executor factory for account-scoped runtimes."""
     global _executor_factory
     _executor_factory = factory
 

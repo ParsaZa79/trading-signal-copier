@@ -9,8 +9,6 @@ from starlette.datastructures import Headers
 
 from src import access_store, account_store, clerk_client, dependencies, runtime_data, security
 
-TELEGRAM_ENV_KEYS = ("TELEGRAM_API_ID", "TELEGRAM_API_HASH", "TELEGRAM_CHANNEL")
-
 
 def _isolate_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(security, "USERS_PATH", tmp_path / "users.json")
@@ -23,15 +21,6 @@ def _isolate_storage(monkeypatch, tmp_path):
     monkeypatch.setattr(runtime_data, "ACCOUNTS_DIR", tmp_path / "accounts")
     monkeypatch.setattr(runtime_data, "CACHE_PATH", tmp_path / "bot_config_cache.json")
     monkeypatch.setattr(runtime_data, "ENV_PATH", tmp_path / ".env")
-    for key in TELEGRAM_ENV_KEYS:
-        monkeypatch.delenv(key, raising=False)
-
-
-def _configure_shared_telegram(monkeypatch, tmp_path):
-    monkeypatch.setenv("TELEGRAM_API_ID", "123456")
-    monkeypatch.setenv("TELEGRAM_API_HASH", "shared-telegram-hash")
-    monkeypatch.setenv("TELEGRAM_CHANNEL", "shared-signals")
-    (tmp_path / "signal_bot_session.session").write_text("session", encoding="utf-8")
 
 
 def test_auth_token_round_trip(monkeypatch, tmp_path):
@@ -247,9 +236,8 @@ def test_accounts_are_not_created_until_requested(monkeypatch, tmp_path):
     assert exc_info.value.status_code == 404
 
 
-def test_account_setup_requires_broker_shared_telegram_and_completion_marker(monkeypatch, tmp_path):
+def test_account_setup_requires_broker_and_completion_marker(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
-    _configure_shared_telegram(monkeypatch, tmp_path)
 
     user = security.create_user("owner@example.com", "correct horse battery")
     account = account_store.create_account(user["id"], "Live Account")

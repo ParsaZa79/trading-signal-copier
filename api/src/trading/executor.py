@@ -1,0 +1,1420 @@
+"""
+MT5 trade executor for an isolated trading-account runtime.
+
+This module handles all MetaTrader 5 trade operations including
+opening, modifying, and closing positions.
+
+Includes automatic reconnection to handle connection drops gracefully.
+"""
+
+import contextlib
+import time
+from collections.abc import Callable
+from datetime import UTC, datetime
+from functools import wraps
+from threading import RLock
+from typing import Any, TypeVar
+
+from .models import OrderType, TradeConfig, TradeSignal
+from .mt5_adapter import MT5Adapter, create_mt5_adapter
+
+T = TypeVar("T")
+
+
+def with_reconnect[T](method: Callable[..., T]) -> Callable[..., T]:
+    """Decorator that ensures connection before executing a method.
+
+    If connection is lost, attempts to reconnect before retrying the operation.
+    """
+
+    @wraps(method)
+    def wrapper(self: "MT5Executor", *args: Any, **kwargs: Any) -> T:
+        # First attempt
+        if self._ensure_connected():
+            try:
+                return method(self, *args, **kwargs)
+            except Exception as e:
+                print(f"Operation failed: {e}, attempting reconnect...")
+                self.connected = False
+
+        # Reconnect and retry
+        if self._reconnect():
+            return method(self, *args, **kwargs)
+
+        # Return appropriate failure based on method
+        method_name = method.__name__
+        if method_name in ("execute_signal", "modify_position", "close_position", "partial_close"):
+            return {"success": False, "error": "Connection lost and reconnect failed"}  # type: ignore
+        elif method_name == "get_account_balance":
+            return 0.0  # type: ignore
+        elif method_name in ("get_position", "get_symbol_info"):
+            return None  # type: ignore
+        elif method_name == "is_position_profitable":
+            return False  # type: ignore
+        elif method_name == "get_current_price":
+            return None  # type: ignore
+        else:
+            return None  # type: ignore
+
+    return wrapper
+
+
+class MT5Executor:
+    """Handles trade execution on MetaTrader 5.
+
+    Provides high-level trading operations built on top of the MT5Adapter,
+    including position management, risk calculations, and automatic reconnection.
+
+    Attributes:
+        connected: Whether successfully connected to MT5
+        max_reconnect_attempts: Maximum number of reconnection attempts
+        reconnect_delay: Delay in seconds between reconnection attempts
+    """
+
+    def __init__(
+        self,
+        login: int,
+        password: str,
+        server: str,
+        docker_host: str | None = None,
+        docker_port: int | None = None,
+        path: str | None = None,
+        max_reconnect_attempts: int = 5,
+        reconnect_delay: float = 2.0,
+    ) -> None:
+        """Initialize executor with MT5 credentials.
+
+        Args:
+            login: MT5 account login number
+            password: MT5 account password
+            server: MT5 broker server name
+            docker_host: Docker/Wine bridge host for macOS/Linux
+            docker_port: Docker/Wine bridge port for macOS/Linux
+            path: MT5 terminal path for Windows
+            max_reconnect_attempts: Max reconnection attempts (default: 5)
+            reconnect_delay: Delay between reconnection attempts in seconds (default: 2.0)
+        """
+        self._login = login
+        self._password = password
+        self._server = server
+        self._docker_host = docker_host
+        self._docker_port = docker_port
+        self._path = path
+        self._mt5: MT5Adapter | None = None
+        self.connected = False
+        self.max_reconnect_attempts = max_reconnect_attempts
+        self.reconnect_delay = reconnect_delay
+        self._last_ping_time: float = 0
+        self._ping_interval: float = 30.0  # Check connection every 30 seconds
+        self._connection_lock = RLock()
+
+    def _connect_new_adapter(
+        self,
+        login: int,
+        password: str,
+        server: str,
+        docker_host: str | None = None,
+        docker_port: int | None = None,
+        path: str | None = None,
+    ) -> tuple[MT5Adapter | None, str | None]:
+        """Create, initialize, and authenticate a new adapter before swapping it in."""
+        try:
+            adapter = create_mt5_adapter(host=docker_host, port=docker_port, path=path)
+        except RuntimeError as e:
+            return None, f"MT5 adapter creation failed: {e}"
+
+        if not adapter.initialize():
+            error = f"MT5 initialize failed: {adapter.last_error()}"
+            with contextlib.suppress(Exception):
+                adapter.shutdown()
+            return None, error
+
+        if not adapter.login(login, password=password, server=server):
+            error = f"MT5 login failed: {adapter.last_error()}"
+            with contextlib.suppress(Exception):
+                adapter.shutdown()
+            return None, error
+
+        return adapter, None
+
+    def _activate_adapter(
+        self,
+        adapter: MT5Adapter,
+        login: int,
+        password: str,
+        server: str,
+        docker_host: str | None,
+        docker_port: int | None,
+        path: str | None,
+    ) -> None:
+        """Swap in an already-authenticated adapter."""
+        old_adapter = self._mt5
+        self._login = login
+        self._password = password
+        self._server = server
+        self._docker_host = docker_host
+        self._docker_port = docker_port
+        self._path = path
+        self._mt5 = adapter
+        self.connected = True
+        self._last_ping_time = time.time()
+
+        if old_adapter is not None and old_adapter is not adapter:
+            with contextlib.suppress(Exception):
+                old_adapter.shutdown()
+
+    def reconfigure(
+        self,
+        login: int,
+        password: str,
+        server: str,
+        docker_host: str | None = None,
+        docker_port: int | None = None,
+        path: str | None = None,
+    ) -> dict:
+        """Connect with new credentials and atomically replace the active connection.
+
+        The current connection is left untouched if the new login fails.
+        """
+        with self._connection_lock:
+            adapter, error = self._connect_new_adapter(
+                login=login,
+                password=password,
+                server=server,
+                docker_host=docker_host,
+                docker_port=docker_port,
+                path=path,
+            )
+            if adapter is None:
+                return {
+                    "success": False,
+                    "connected": self.connected,
+                    "error": error or "MT5 connection failed",
+                    "health": self.health_check(),
+                }
+
+            self._activate_adapter(adapter, login, password, server, docker_host, docker_port, path)
+            return {
+                "success": True,
+                "connected": True,
+                "health": self.health_check(),
+            }
+
+    def connect(self) -> bool:
+        """Initialize and connect to MT5.
+
+        Returns:
+            True if connection successful, False otherwise
+        """
+        with self._connection_lock:
+            adapter, error = self._connect_new_adapter(
+                login=self._login,
+                password=self._password,
+                server=self._server,
+                docker_host=self._docker_host,
+                docker_port=self._docker_port,
+                path=self._path,
+            )
+            if adapter is None:
+                print(error or "MT5 connection failed")
+                return False
+
+            self._activate_adapter(
+                adapter,
+                self._login,
+                self._password,
+                self._server,
+                self._docker_host,
+                self._docker_port,
+                self._path,
+            )
+
+        account_info = self._mt5.account_info() if self._mt5 else None
+        if account_info:
+            print(f"Connected to MT5: {account_info.name}, Balance: {account_info.balance}")
+        else:
+            print("Connected to MT5 (account info not available)")
+        return True
+
+    def disconnect(self) -> None:
+        """Shutdown MT5 connection."""
+        with self._connection_lock:
+            if self._mt5:
+                self._mt5.shutdown()
+            self.connected = False
+
+    def is_alive(self) -> bool:
+        """Check if the connection to MT5 is alive.
+
+        Performs a ping to verify the connection is responsive.
+
+        Returns:
+            True if connection is alive, False otherwise
+        """
+        if not self._mt5 or not self.connected:
+            return False
+        try:
+            return self._mt5.ping()
+        except Exception:
+            return False
+
+    def _ensure_connected(self) -> bool:
+        """Ensure we have an active connection, checking periodically.
+
+        Returns:
+            True if connected, False if connection check failed
+        """
+        if not self.connected or not self._mt5:
+            return False
+
+        # Only ping if enough time has passed since last check
+        current_time = time.time()
+        if current_time - self._last_ping_time >= self._ping_interval:
+            if not self.is_alive():
+                self.connected = False
+                return False
+            self._last_ping_time = current_time
+
+        return True
+
+    def _reconnect(self) -> bool:
+        """Attempt to reconnect to MT5 with retries.
+
+        Returns:
+            True if reconnection successful, False otherwise
+        """
+        with self._connection_lock:
+            if self._mt5 and self.connected and self._mt5.ping():
+                return True
+
+            print("Attempting to reconnect to MT5...")
+
+            # Clean up existing connection after confirming it is not healthy.
+            if self._mt5:
+                with contextlib.suppress(Exception):
+                    self._mt5.shutdown()
+                self._mt5 = None
+            self.connected = False
+
+            for attempt in range(1, self.max_reconnect_attempts + 1):
+                print(f"Reconnection attempt {attempt}/{self.max_reconnect_attempts}...")
+
+                adapter, error = self._connect_new_adapter(
+                    login=self._login,
+                    password=self._password,
+                    server=self._server,
+                    docker_host=self._docker_host,
+                    docker_port=self._docker_port,
+                    path=self._path,
+                )
+                if adapter is not None:
+                    self._activate_adapter(
+                        adapter,
+                        self._login,
+                        self._password,
+                        self._server,
+                        self._docker_host,
+                        self._docker_port,
+                        self._path,
+                    )
+                    print("Reconnection successful!")
+                    return True
+
+                print(error or "Reconnection failed")
+                if attempt < self.max_reconnect_attempts:
+                    print(f"Reconnection failed, waiting {self.reconnect_delay}s before retry...")
+                    time.sleep(self.reconnect_delay)
+
+            print("All reconnection attempts failed!")
+            return False
+
+    def health_check(self) -> dict:
+        """Perform a comprehensive health check of the MT5 connection.
+
+        Returns:
+            Dict with health status information
+        """
+        status = {
+            "connected": self.connected,
+            "ping_ok": False,
+            "account_accessible": False,
+            "trading_enabled": False,
+            "account_balance": 0.0,
+            "account_server": None,
+            "account_company": None,
+            "error": None,
+        }
+
+        if not self._mt5 or not self.connected:
+            status["error"] = "Not connected"
+            return status
+
+        try:
+            # Check ping
+            status["ping_ok"] = self._mt5.ping()
+
+            # Check account info
+            account = self._mt5.account_info()
+            if account:
+                status["account_accessible"] = True
+                status["account_balance"] = account.balance
+                status["trading_enabled"] = account.trade_allowed
+                status["account_server"] = getattr(account, "server", None)
+                status["account_company"] = getattr(account, "company", None)
+
+        except Exception as e:
+            status["error"] = str(e)
+
+        return status
+
+    @with_reconnect
+    def get_account_balance(self) -> float:
+        """Get current account balance.
+
+        Auto-reconnects if connection is lost.
+
+        Returns:
+            Account balance or 0.0 if unavailable
+        """
+        if not self._mt5:
+            return 0.0
+        info = self._mt5.account_info()
+        return info.balance if info else 0.0
+
+    @with_reconnect
+    def get_symbol_info(self, symbol: str) -> dict | None:
+        """Get symbol information, trying common variations.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            symbol: The trading symbol (e.g., "XAUUSD")
+
+        Returns:
+            Dict with 'info' and 'symbol' keys, or None if not found
+        """
+        if not self._mt5:
+            return None
+
+        info = self._mt5.symbol_info(symbol)
+        if info is None:
+            # Try common variations (different broker naming conventions)
+            variations = [symbol, f"{symbol}b", f"{symbol}.r", f"{symbol}m", f"{symbol}_"]
+            for var in variations:
+                info = self._mt5.symbol_info(var)
+                if info:
+                    return {"info": info, "symbol": var}
+            return None
+        return {"info": info, "symbol": symbol}
+
+    @with_reconnect
+    def get_position(self, ticket: int) -> dict | None:
+        """Get position details by ticket number.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            ticket: The MT5 position ticket
+
+        Returns:
+            Position dict with ticket, symbol, type, volume, etc., or None
+        """
+        if not self._mt5:
+            return None
+
+        positions = self._mt5.positions_get(ticket=ticket)
+        if positions and len(positions) > 0:
+            pos = positions[0]
+            return {
+                "ticket": pos.ticket,
+                "symbol": pos.symbol,
+                "type": pos.type,
+                "volume": pos.volume,
+                "price_open": pos.price_open,
+                "sl": pos.sl,
+                "tp": pos.tp,
+                "profit": pos.profit,
+            }
+        return None
+
+    @with_reconnect
+    def is_position_profitable(self, ticket: int) -> bool:
+        """Check if position is in profit.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            ticket: The MT5 position ticket
+
+        Returns:
+            True if profit >= 0, False otherwise or if not found
+        """
+        pos = self.get_position(ticket)
+        if pos is None:
+            return False
+        return pos["profit"] >= 0
+
+    @with_reconnect
+    def would_close_profitably(
+        self, ticket: int, original_tp: float | None = None
+    ) -> tuple[bool, float | None]:
+        """Check if closing at current price would be profitable.
+
+        For TP verification: only force-close if position has reached TP or is profitable.
+        This prevents force-closing at a loss when "TP hit" notification was premature.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            ticket: The MT5 position ticket
+            original_tp: The original take profit price (optional, for threshold calc)
+
+        Returns:
+            Tuple of (is_safe_to_close, current_price).
+            is_safe_to_close is True if position is profitable or at/past TP.
+        """
+        pos = self.get_position(ticket)
+        if pos is None:
+            # Position doesn't exist - probably already closed, safe to proceed
+            return (True, None)
+
+        # Position is in profit - safe to close
+        if pos["profit"] >= 0:
+            current_price = self._get_current_close_price(pos["symbol"], pos["type"])
+            return (True, current_price)
+
+        # Position is at a loss - not safe to force close
+        current_price = self._get_current_close_price(pos["symbol"], pos["type"])
+        return (False, current_price)
+
+    def _get_current_close_price(self, symbol: str, pos_type: int) -> float | None:
+        """Get the price at which a position would close.
+
+        Args:
+            symbol: The trading symbol
+            pos_type: MT5 position type (0=BUY, 1=SELL)
+
+        Returns:
+            Current close price (bid for BUY, ask for SELL) or None
+        """
+        if not self._mt5:
+            return None
+        tick = self._mt5.symbol_info_tick(symbol)
+        if tick is None:
+            return None
+        # BUY positions close at bid, SELL positions close at ask
+        return tick.bid if pos_type == 0 else tick.ask
+
+    @with_reconnect
+    def execute_signal(
+        self,
+        signal: TradeSignal,
+        lot_size: float | None = None,
+        broker_symbol: str | None = None,
+        default_lot_size: float = 0.01,
+    ) -> dict:
+        """Execute a trade signal on MT5.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            signal: The parsed trade signal
+            lot_size: Override lot size (optional)
+            broker_symbol: Broker-specific symbol name (optional)
+            default_lot_size: Default lot size if not specified
+
+        Returns:
+            Result dict with 'success' key and trade details or 'error'
+        """
+        if not self.connected or not self._mt5:
+            return {"success": False, "error": "Not connected to MT5"}
+
+        # Defensive validation: reject trades without stop loss
+        if signal.stop_loss is None or signal.stop_loss == 0.0:
+            return {"success": False, "error": "Stop loss required for all positions"}
+
+        # Resolve symbol - try broker symbol first, then fall back to original signal symbol
+        symbol_to_find = broker_symbol or signal.symbol
+        sym_data = self.get_symbol_info(symbol_to_find)
+        if not sym_data and broker_symbol and broker_symbol != signal.symbol:
+            # Broker symbol not found, try original signal symbol
+            print(f"    [INFO] Broker symbol {broker_symbol} not found, trying {signal.symbol}")
+            sym_data = self.get_symbol_info(signal.symbol)
+        if not sym_data:
+            return {"success": False, "error": f"Symbol {symbol_to_find} not found"}
+
+        symbol = sym_data["symbol"]
+        symbol_info = sym_data["info"]
+
+        # Ensure symbol is visible in Market Watch
+        if not symbol_info.visible:
+            self._mt5.symbol_select(symbol, True)
+
+        # Determine lot size
+        lots = lot_size or signal.lot_size or default_lot_size
+        lots = max(symbol_info.volume_min, min(lots, symbol_info.volume_max))
+
+        # Get current prices
+        tick = self._mt5.symbol_info_tick(symbol)
+        if tick is None:
+            return {"success": False, "error": "Could not get current price"}
+
+        # Determine execution price for validation
+        is_buy = signal.order_type in [OrderType.BUY, OrderType.BUY_LIMIT, OrderType.BUY_STOP]
+        exec_price = tick.ask if is_buy else tick.bid
+
+        # Find a valid TP (trying each one, with 1:1 RR fallback)
+        tp_to_use = None
+        if signal.take_profits:
+            tp_to_use, tp_warning = self.find_valid_tp(
+                is_buy, exec_price, signal.take_profits, signal.stop_loss
+            )
+            if tp_warning:
+                print(f"    [WARNING] {tp_warning}")
+
+        # Validate SL/TP before building order
+        validated_sl, validated_tp, warnings = self.validate_sl_tp(
+            is_buy, exec_price, signal.stop_loss, tp_to_use
+        )
+
+        # Log any validation warnings
+        for w in warnings:
+            print(f"    [WARNING] {w}")
+
+        # Update signal with validated values for order building
+        # Note: We need to modify the signal temporarily for _build_order_request
+        original_sl = signal.stop_loss
+        original_tps = signal.take_profits
+        signal.stop_loss = validated_sl
+        signal.take_profits = [validated_tp] if validated_tp is not None else []
+
+        # Build order request
+        request = self._build_order_request(signal, symbol, lots, tick)
+
+        # Restore original values (in case signal is used elsewhere)
+        signal.stop_loss = original_sl
+        signal.take_profits = original_tps
+        print(f"    [DEBUG] Execute request: {request}")
+
+        # Verify connection before sending
+        if not self._mt5.ping():
+            print("    [DEBUG] Connection lost before execute, attempting reconnect...")
+            if not self._reconnect():
+                return {"success": False, "error": "Connection lost and reconnect failed"}
+
+        # Check order first to get detailed validation
+        check_result = self._mt5.order_check(request)
+        print(f"    [DEBUG] order_check result: {check_result}")
+
+        # Send the order
+        result = self._mt5.order_send(request)
+        print(f"    [DEBUG] order_send result: {result}")
+
+        if result is None:
+            last_error = self._mt5.last_error()
+            print(f"    [DEBUG] Last error: {last_error}")
+            return {
+                "success": False,
+                "error": f"Order send failed (None), last_error: {last_error}",
+                "retcode": -1,
+            }
+
+        if result.retcode != self._mt5.TRADE_RETCODE_DONE:
+            error_msg = result.comment if result.comment else f"Retcode {result.retcode}"
+            print(
+                "    [DEBUG] Order failed - "
+                f"retcode: {result.retcode}, comment: {result.comment}"
+            )
+            return {
+                "success": False,
+                "error": f"Order failed: {error_msg}",
+                "retcode": result.retcode,
+            }
+
+        # Verify SL/TP were set correctly - some brokers/libraries may fail to set them
+        ticket = result.order
+        expected_sl = request.get("sl")
+        expected_tp = request.get("tp")
+
+        if expected_sl or expected_tp:
+            pos = self.get_position(ticket)
+            if pos:
+                actual_sl = pos.get("sl", 0)
+                actual_tp = pos.get("tp", 0)
+                sl_mismatch = expected_sl and abs(actual_sl - expected_sl) > 0.01
+                tp_mismatch = expected_tp and abs(actual_tp - expected_tp) > 0.01
+
+                if sl_mismatch or tp_mismatch:
+                    print("    [WARNING] SL/TP mismatch after execution!")
+                    print(f"    [WARNING] Expected SL={expected_sl}, TP={expected_tp}")
+                    print(f"    [WARNING] Actual SL={actual_sl}, TP={actual_tp}")
+                    print("    [WARNING] Attempting to fix via modify_position...")
+
+                    # Try to set the correct SL/TP
+                    fix_result = self.modify_position(
+                        ticket,
+                        sl=expected_sl if sl_mismatch else None,
+                        tp=expected_tp if tp_mismatch else None,
+                    )
+                    if fix_result["success"]:
+                        print("    [WARNING] SL/TP corrected successfully")
+                    else:
+                        print(f"    [ERROR] Failed to correct SL/TP: {fix_result['error']}")
+
+        return {
+            "success": True,
+            "ticket": ticket,
+            "volume": lots,
+            "price": result.price,
+            "symbol": symbol,
+        }
+
+    def execute_dual_signal(
+        self,
+        signal: TradeSignal,
+        trade_configs: list[TradeConfig],
+        lot_size: float | None = None,
+        broker_symbol: str | None = None,
+        default_lot_size: float = 0.01,
+    ) -> dict[str, dict]:
+        """Execute dual trades for a signal based on strategy configs.
+
+        Args:
+            signal: The parsed trade signal
+            trade_configs: List of TradeConfig objects from the strategy
+            lot_size: Override lot size (optional)
+            broker_symbol: Broker-specific symbol name (optional)
+            default_lot_size: Default lot size if not specified
+
+        Returns:
+            Dict with role names as keys, each containing trade result
+        """
+        results: dict[str, dict] = {}
+
+        for config in trade_configs:
+            # Create a modified signal with the specific TP from the config
+            role_label = config.role.value.upper()
+            comment = (
+                f"{signal.comment[:180]} [{role_label}]"
+                if signal.comment
+                else f"[{role_label}]"
+            )
+            modified_signal = TradeSignal(
+                symbol=signal.symbol,
+                order_type=signal.order_type,
+                entry_price=signal.entry_price,
+                stop_loss=config.sl if config.sl is not None else signal.stop_loss,
+                take_profits=[config.tp] if config.tp is not None else [],
+                lot_size=signal.lot_size,
+                comment=comment,
+                confidence=signal.confidence,
+                message_type=signal.message_type,
+                is_complete=signal.is_complete,
+            )
+
+            # Calculate lot size (explicit size overrides multiplier/base logic)
+            if config.lot_size is not None:
+                effective_lot_size = config.lot_size
+            else:
+                effective_lot_size = lot_size or signal.lot_size or default_lot_size
+                effective_lot_size *= config.lot_multiplier
+
+            result = self.execute_signal(
+                modified_signal,
+                lot_size=effective_lot_size,
+                broker_symbol=broker_symbol,
+                default_lot_size=default_lot_size,
+            )
+
+            results[config.role.value] = result
+
+            if result["success"]:
+                print(
+                    f"  {role_label} trade opened: "
+                    f"ticket {result['ticket']}, TP={config.tp}"
+                )
+            else:
+                print(
+                    f"  {role_label} trade failed: "
+                    f"{result.get('error', 'Unknown error')}"
+                )
+
+        return results
+
+    def move_to_breakeven(self, ticket: int, entry_price: float) -> dict:
+        """Move stop loss to entry price (breakeven).
+
+        This is a convenience wrapper around modify_position that sets
+        the SL to the original entry price.
+
+        Args:
+            ticket: MT5 position ticket
+            entry_price: The original entry price to move SL to
+
+        Returns:
+            Result dict with success status
+        """
+        print(f"  Moving SL to breakeven ({entry_price}) for ticket {ticket}")
+        return self.modify_position(ticket, sl=entry_price)
+
+    def _build_order_request(
+        self,
+        signal: TradeSignal,
+        symbol: str,
+        lots: float,
+        tick,  # type: ignore[no-untyped-def]
+    ) -> dict:
+        """Build the MT5 order request dictionary.
+
+        Requires self._mt5 to be initialized (caller must check).
+        """
+        assert self._mt5 is not None  # Caller ensures this
+
+        is_buy = signal.order_type in [OrderType.BUY, OrderType.BUY_LIMIT, OrderType.BUY_STOP]
+
+        # Determine filling mode from symbol info
+        sym_info = self._mt5.symbol_info(symbol)
+        if sym_info and sym_info.filling_mode & 1:  # FOK supported
+            filling_mode = self._mt5.ORDER_FILLING_FOK
+        elif sym_info and sym_info.filling_mode & 2:  # IOC supported
+            filling_mode = self._mt5.ORDER_FILLING_IOC
+        else:
+            filling_mode = self._mt5.ORDER_FILLING_RETURN
+
+        request: dict = {
+            "action": int(self._mt5.TRADE_ACTION_DEAL),
+            "symbol": str(symbol),
+            "volume": float(lots),
+            "type": int(
+                self._mt5.ORDER_TYPE_BUY
+                if signal.order_type == OrderType.BUY
+                else self._mt5.ORDER_TYPE_SELL
+            ),
+            "price": float(tick.ask if is_buy else tick.bid),
+            "deviation": 20,
+            "magic": 123456,
+            "comment": signal.comment[:200] or "Copy Trading",
+            "type_time": int(self._mt5.ORDER_TIME_GTC),
+            "type_filling": int(filling_mode),
+        }
+
+        # Add SL/TP (ensure floats and normalize to symbol digits)
+        digits = sym_info.digits if sym_info else 2
+        if signal.stop_loss:
+            request["sl"] = round(float(signal.stop_loss), digits)
+        if signal.take_profits:
+            # Only use TP1 (first element) - TP2/TP3 are ignored
+            # TP1 is hit most frequently, so we close the trade there
+            tp1 = signal.take_profits[0]
+            request["tp"] = round(float(tp1), digits)
+
+        # Handle pending orders
+        if signal.order_type in [
+            OrderType.BUY_LIMIT,
+            OrderType.SELL_LIMIT,
+            OrderType.BUY_STOP,
+            OrderType.SELL_STOP,
+        ]:
+            request["action"] = int(self._mt5.TRADE_ACTION_PENDING)
+
+            # Ensure entry price is properly rounded to symbol digits
+            entry_price = (
+                float(signal.entry_price)
+                if signal.entry_price
+                else float(tick.ask if is_buy else tick.bid)
+            )
+            request["price"] = float(round(entry_price, digits))
+
+            type_map = {
+                OrderType.BUY_LIMIT: self._mt5.ORDER_TYPE_BUY_LIMIT,
+                OrderType.SELL_LIMIT: self._mt5.ORDER_TYPE_SELL_LIMIT,
+                OrderType.BUY_STOP: self._mt5.ORDER_TYPE_BUY_STOP,
+                OrderType.SELL_STOP: self._mt5.ORDER_TYPE_SELL_STOP,
+            }
+            request["type"] = int(type_map[signal.order_type])
+
+            # Remove deviation for pending orders (not applicable)
+            request.pop("deviation", None)
+
+            # Use RETURN filling mode for pending orders (most compatible)
+            request["type_filling"] = int(self._mt5.ORDER_FILLING_RETURN)
+
+        return request
+
+    @with_reconnect
+    def modify_position(
+        self,
+        ticket: int,
+        sl: float | None = None,
+        tp: float | None = None,
+    ) -> dict:
+        """Modify SL/TP of an existing position.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            ticket: The MT5 position ticket
+            sl: New stop loss price (optional)
+            tp: New take profit price (optional)
+
+        Returns:
+            Result dict with 'success' key
+        """
+        if not self.connected or not self._mt5:
+            return {"success": False, "error": "Not connected to MT5"}
+
+        pos = self.get_position(ticket)
+        if not pos:
+            return {"success": False, "error": f"Position {ticket} not found"}
+
+        new_sl = float(sl) if sl is not None else pos["sl"]
+        new_tp = float(tp) if tp is not None else pos["tp"]
+
+        # Get symbol info for proper formatting
+        sym_info = self._mt5.symbol_info(pos["symbol"])
+        if sym_info:
+            # Normalize SL/TP to proper decimal places
+            digits = sym_info.digits
+            new_sl = round(new_sl, digits)
+            new_tp = round(new_tp, digits) if new_tp else 0.0
+
+        # Ensure all values are proper types for MT5
+        request = {
+            "action": self._mt5.TRADE_ACTION_SLTP,
+            "position": int(ticket),
+            "symbol": str(pos["symbol"]),
+            "volume": float(pos["volume"]),
+            "sl": float(new_sl),
+            "tp": float(new_tp),
+            "magic": 123456,
+        }
+
+        print(f"    [DEBUG] Modify request: {request}")
+        print(f"    [DEBUG] Position info: {pos}")
+
+        # Verify connection before sending
+        if not self._mt5.ping():
+            print("    [DEBUG] Connection lost, attempting reconnect...")
+            if not self._reconnect():
+                return {"success": False, "error": "Connection lost and reconnect failed"}
+
+        result = self._mt5.order_send(request)
+        print(f"    [DEBUG] order_send result: {result}")
+
+        if result is None:
+            # Try to get more info about what went wrong
+            last_error = self._mt5.last_error()
+            print(f"    [DEBUG] Last error: {last_error}")
+            return {
+                "success": False,
+                "error": f"order_send returned None, last_error: {last_error}",
+            }
+
+        if result.retcode != self._mt5.TRADE_RETCODE_DONE:
+            error_msg = result.comment if result.comment else f"Retcode {result.retcode}"
+            print(
+                "    [DEBUG] Modify failed - "
+                f"retcode: {result.retcode}, comment: {result.comment}"
+            )
+            return {
+                "success": False,
+                "error": error_msg,
+                "retcode": result.retcode,
+            }
+
+        return {
+            "success": True,
+            "ticket": ticket,
+            "new_sl": request["sl"],
+            "new_tp": request["tp"],
+        }
+
+    @with_reconnect
+    def close_position(self, ticket: int) -> dict:
+        """Close an open position by placing opposite order.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            ticket: The MT5 position ticket
+
+        Returns:
+            Result dict with 'success' key and close details
+        """
+        if not self.connected or not self._mt5:
+            return {"success": False, "error": "Not connected to MT5"}
+
+        pos = self.get_position(ticket)
+        if not pos:
+            return {"success": False, "error": f"Position {ticket} not found"}
+
+        tick = self._mt5.symbol_info_tick(pos["symbol"])
+        if not tick:
+            return {"success": False, "error": "Could not get current price"}
+
+        # Close by placing opposite order
+        # type 0 = BUY, so we SELL to close; type 1 = SELL, so we BUY to close
+        is_buy = pos["type"] == 0
+        close_type = self._mt5.ORDER_TYPE_SELL if is_buy else self._mt5.ORDER_TYPE_BUY
+        price = tick.bid if is_buy else tick.ask
+
+        # Determine filling mode from symbol info
+        sym_info = self._mt5.symbol_info(pos["symbol"])
+        if sym_info and sym_info.filling_mode & 1:  # FOK supported
+            filling_mode = self._mt5.ORDER_FILLING_FOK
+        elif sym_info and sym_info.filling_mode & 2:  # IOC supported
+            filling_mode = self._mt5.ORDER_FILLING_IOC
+        else:
+            filling_mode = self._mt5.ORDER_FILLING_RETURN
+
+        request = {
+            "action": self._mt5.TRADE_ACTION_DEAL,
+            "position": ticket,
+            "symbol": pos["symbol"],
+            "volume": pos["volume"],
+            "type": close_type,
+            "price": price,
+            "deviation": 20,
+            "magic": 123456,
+            "comment": "Copy Trading Close",
+            "type_time": self._mt5.ORDER_TIME_GTC,
+            "type_filling": filling_mode,
+        }
+
+        result = self._mt5.order_send(request)
+        if result is None or result.retcode != self._mt5.TRADE_RETCODE_DONE:
+            error_msg = result.comment if result else "Close failed"
+            return {"success": False, "error": error_msg}
+
+        return {"success": True, "ticket": ticket, "closed_at": price}
+
+    @with_reconnect
+    def partial_close(self, ticket: int, percentage: int) -> dict:
+        """Close a percentage of an open position.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            ticket: The MT5 position ticket
+            percentage: Percentage to close (e.g., 70 for 70%)
+
+        Returns:
+            Result dict with 'success' key and close details
+        """
+        if not self.connected or not self._mt5:
+            return {"success": False, "error": "Not connected to MT5"}
+
+        if percentage <= 0 or percentage >= 100:
+            return {"success": False, "error": f"Invalid percentage: {percentage}"}
+
+        pos = self.get_position(ticket)
+        if not pos:
+            return {"success": False, "error": f"Position {ticket} not found"}
+
+        # Calculate lots to close
+        current_volume = pos["volume"]
+        close_volume = current_volume * (percentage / 100.0)
+
+        # Round to symbol's volume step
+        sym_info = self._mt5.symbol_info(pos["symbol"])
+        volume_min = 0.0
+        if sym_info:
+            volume_step = sym_info.volume_step
+            volume_min = sym_info.volume_min
+            close_volume = round(close_volume / volume_step) * volume_step
+            close_volume = max(close_volume, volume_min)
+            # Don't close more than we have
+            close_volume = min(close_volume, current_volume)
+
+        # Safety guard:
+        # If rounding/min-volume constraints would turn a partial close into
+        # a full close, skip the action and wait for an explicit full_close.
+        epsilon = 1e-9
+        remaining_volume = current_volume - close_volume
+        if close_volume >= current_volume - epsilon:
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": (
+                    "Partial close skipped: calculated close volume would fully close position"
+                ),
+                "ticket": ticket,
+                "closed_volume": 0.0,
+                "remaining_volume": current_volume,
+                "percentage": percentage,
+            }
+        if sym_info and remaining_volume < volume_min - epsilon:
+            return {
+                "success": True,
+                "skipped": True,
+                "reason": "Partial close skipped: remaining volume would be below symbol minimum",
+                "ticket": ticket,
+                "closed_volume": 0.0,
+                "remaining_volume": current_volume,
+                "percentage": percentage,
+            }
+
+        tick = self._mt5.symbol_info_tick(pos["symbol"])
+        if not tick:
+            return {"success": False, "error": "Could not get current price"}
+
+        # Close by placing opposite order
+        is_buy = pos["type"] == 0
+        close_type = self._mt5.ORDER_TYPE_SELL if is_buy else self._mt5.ORDER_TYPE_BUY
+        price = tick.bid if is_buy else tick.ask
+
+        # Determine filling mode
+        if sym_info and sym_info.filling_mode & 1:
+            filling_mode = self._mt5.ORDER_FILLING_FOK
+        elif sym_info and sym_info.filling_mode & 2:
+            filling_mode = self._mt5.ORDER_FILLING_IOC
+        else:
+            filling_mode = self._mt5.ORDER_FILLING_RETURN
+
+        request = {
+            "action": self._mt5.TRADE_ACTION_DEAL,
+            "position": ticket,
+            "symbol": pos["symbol"],
+            "volume": close_volume,
+            "type": close_type,
+            "price": price,
+            "deviation": 20,
+            "magic": 123456,
+            "comment": f"Copy Trading Reduce {percentage}%",
+            "type_time": self._mt5.ORDER_TIME_GTC,
+            "type_filling": filling_mode,
+        }
+
+        result = self._mt5.order_send(request)
+        if result is None or result.retcode != self._mt5.TRADE_RETCODE_DONE:
+            error_msg = result.comment if result else "Partial close failed"
+            return {"success": False, "error": error_msg}
+
+        remaining_volume = current_volume - close_volume
+        return {
+            "success": True,
+            "ticket": ticket,
+            "skipped": False,
+            "closed_volume": close_volume,
+            "remaining_volume": remaining_volume,
+            "closed_at": price,
+            "percentage": percentage,
+        }
+
+    def calculate_default_sl(
+        self,
+        symbol: str,
+        order_type: OrderType,
+        entry_price: float,
+        lot_size: float,
+        max_risk_percent: float = 0.10,
+    ) -> float:
+        """Calculate default SL based on percentage of balance risk.
+
+        Args:
+            symbol: The trading symbol
+            order_type: Buy or Sell direction
+            entry_price: The entry price
+            lot_size: The position lot size
+            max_risk_percent: Maximum risk as fraction of balance (default 10%)
+
+        Returns:
+            Calculated stop loss price
+        """
+        balance = self.get_account_balance()
+        max_risk = balance * max_risk_percent
+
+        # Get symbol info for point value
+        sym_data = self.get_symbol_info(symbol)
+        if not sym_data:
+            # Fallback values
+            fallback = 5.0 if "XAU" in symbol.upper() else 0.0050
+            is_buy = order_type in [OrderType.BUY, OrderType.BUY_LIMIT, OrderType.BUY_STOP]
+            return entry_price - fallback if is_buy else entry_price + fallback
+
+        symbol_info = sym_data["info"]
+        point = symbol_info.point
+        tick_value = symbol_info.trade_tick_value
+
+        # Calculate SL distance
+        if lot_size * tick_value > 0:
+            sl_distance = (max_risk * point) / (lot_size * tick_value)
+        else:
+            sl_distance = 500 * point  # Fallback
+
+        is_buy = order_type in [OrderType.BUY, OrderType.BUY_LIMIT, OrderType.BUY_STOP]
+        return entry_price - sl_distance if is_buy else entry_price + sl_distance
+
+    def validate_sl_tp(
+        self,
+        is_buy: bool,
+        entry_price: float,
+        stop_loss: float | None,
+        take_profit: float | None,
+    ) -> tuple[float | None, float | None, list[str]]:
+        """Validate SL/TP relative to entry price direction.
+
+        For BUY: TP must be above entry, SL must be below entry
+        For SELL: TP must be below entry, SL must be above entry
+
+        Invalid values are returned as None (skipped) with a warning, rather than
+        failing the entire order. This allows partial SL/TP to be set.
+
+        Args:
+            is_buy: True for BUY orders, False for SELL
+            entry_price: The execution/entry price
+            stop_loss: Proposed stop loss (or None)
+            take_profit: Proposed take profit (or None)
+
+        Returns:
+            Tuple of (validated_sl, validated_tp, warnings).
+            Invalid values become None with corresponding warning messages.
+        """
+        warnings: list[str] = []
+        validated_sl = stop_loss
+        validated_tp = take_profit
+
+        if is_buy:
+            # BUY: TP must be above entry, SL must be below entry
+            if validated_tp is not None and validated_tp <= entry_price:
+                warnings.append(
+                    f"Invalid TP {validated_tp} for BUY @ {entry_price} "
+                    "(TP must be > entry) - skipping TP"
+                )
+                validated_tp = None
+            if validated_sl is not None and validated_sl >= entry_price:
+                warnings.append(
+                    f"Invalid SL {validated_sl} for BUY @ {entry_price} "
+                    "(SL must be < entry) - skipping SL"
+                )
+                validated_sl = None
+        else:
+            # SELL: TP must be below entry, SL must be above entry
+            if validated_tp is not None and validated_tp >= entry_price:
+                warnings.append(
+                    f"Invalid TP {validated_tp} for SELL @ {entry_price} "
+                    "(TP must be < entry) - skipping TP"
+                )
+                validated_tp = None
+            if validated_sl is not None and validated_sl <= entry_price:
+                warnings.append(
+                    f"Invalid SL {validated_sl} for SELL @ {entry_price} "
+                    "(SL must be > entry) - skipping SL"
+                )
+                validated_sl = None
+
+        return validated_sl, validated_tp, warnings
+
+    def find_valid_tp(
+        self,
+        is_buy: bool,
+        entry_price: float,
+        take_profits: list[float],
+        stop_loss: float | None,
+    ) -> tuple[float | None, str | None]:
+        """Find first valid TP or calculate 1:1 RR fallback.
+
+        Iterates through TPs to find one that's valid for the direction.
+        If all TPs are already breached (price moved past them), falls back
+        to a 1:1 risk-reward TP based on the stop loss distance.
+
+        Args:
+            is_buy: True for BUY orders, False for SELL
+            entry_price: The execution/entry price
+            take_profits: List of take profit prices (TP1, TP2, TP3...)
+            stop_loss: The stop loss price (used for 1:1 RR fallback)
+
+        Returns:
+            Tuple of (valid_tp, warning_message). Warning is None if TP1 is valid.
+        """
+        for i, tp in enumerate(take_profits):
+            is_valid = (tp > entry_price) if is_buy else (tp < entry_price)
+            if is_valid:
+                warning = f"TP1-TP{i} breached, using TP{i+1}={tp}" if i > 0 else None
+                return tp, warning
+
+        # All TPs invalid - use 1:1 RR fallback
+        if stop_loss is not None:
+            sl_distance = abs(entry_price - stop_loss)
+            fallback_tp = entry_price + sl_distance if is_buy else entry_price - sl_distance
+            return fallback_tp, f"All TPs breached, using 1:1 RR fallback TP={fallback_tp:.2f}"
+
+        return None, "All TPs invalid, no SL for fallback - opening without TP"
+
+    @with_reconnect
+    def get_current_price(self, symbol: str, for_buy: bool) -> float | None:
+        """Get current ask (for buy) or bid (for sell) price.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            symbol: The trading symbol
+            for_buy: True for ask price, False for bid price
+
+        Returns:
+            Current price or None if unavailable
+        """
+        if not self._mt5:
+            return None
+        tick = self._mt5.symbol_info_tick(symbol)
+        if tick is None:
+            return None
+        return tick.ask if for_buy else tick.bid
+
+    @with_reconnect
+    def get_pending_orders(self, symbol: str | None = None) -> list[dict]:
+        """Get pending orders, optionally filtered by symbol.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            symbol: Optional symbol to filter by
+
+        Returns:
+            List of pending order dicts
+        """
+        if not self._mt5:
+            return []
+
+        orders = self._mt5.orders_get(symbol=symbol) if symbol else self._mt5.orders_get()
+
+        if not orders:
+            return []
+
+        return [
+            {
+                "ticket": order.ticket,
+                "symbol": order.symbol,
+                "type": order.type,
+                "volume": order.volume_current,
+                "price_open": order.price_open,
+                "sl": order.sl,
+                "tp": order.tp,
+                "comment": order.comment,
+            }
+            for order in orders
+        ]
+
+    @with_reconnect
+    def get_pending_order(self, ticket: int) -> dict | None:
+        """Get pending order details by ticket number.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            ticket: The MT5 order ticket
+
+        Returns:
+            Order dict or None if not found
+        """
+        if not self._mt5:
+            return None
+
+        orders = self._mt5.orders_get(ticket=ticket)
+        if orders and len(orders) > 0:
+            order = orders[0]
+            return {
+                "ticket": order.ticket,
+                "symbol": order.symbol,
+                "type": order.type,
+                "volume": order.volume_current,
+                "price_open": order.price_open,
+                "sl": order.sl,
+                "tp": order.tp,
+                "comment": order.comment,
+            }
+        return None
+
+    @with_reconnect
+    def cancel_pending_order(self, ticket: int) -> dict:
+        """Cancel a pending order by ticket.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            ticket: The MT5 order ticket
+
+        Returns:
+            Result dict with 'success' key
+        """
+        if not self.connected or not self._mt5:
+            return {"success": False, "error": "Not connected to MT5"}
+
+        # Verify order exists
+        order = self.get_pending_order(ticket)
+        if not order:
+            return {"success": False, "error": f"Pending order {ticket} not found"}
+
+        request = {
+            "action": self._mt5.TRADE_ACTION_REMOVE,
+            "order": ticket,
+        }
+
+        result = self._mt5.order_send(request)
+        if result is None or result.retcode != self._mt5.TRADE_RETCODE_DONE:
+            error_msg = result.comment if result else "Cancel failed"
+            return {
+                "success": False,
+                "error": error_msg,
+                "retcode": getattr(result, "retcode", None),
+            }
+
+        return {"success": True, "ticket": ticket}
+
+    @with_reconnect
+    def get_history_deals(
+        self,
+        date_from: "datetime | None" = None,
+        date_to: "datetime | None" = None,
+        days: int = 30,
+    ) -> list[dict]:
+        """Get historical deals from MT5.
+
+        Auto-reconnects if connection is lost.
+
+        Args:
+            date_from: Start datetime (optional, defaults to 'days' ago)
+            date_to: End datetime (optional, defaults to now)
+            days: Number of days to look back if date_from not specified
+
+        Returns:
+            List of deal dicts with ticket, symbol, type, volume, price, profit, etc.
+        """
+        from datetime import timedelta
+
+        if not self._mt5:
+            return []
+
+        # Default date range
+        if date_to is None:
+            date_to = datetime.now(UTC)
+        if date_from is None:
+            date_from = date_to - timedelta(days=days)
+
+        deals = self._mt5.history_deals_get(date_from, date_to)
+        if not deals:
+            return []
+
+        result = []
+        for deal in deals:
+            # Filter to only closed trades (entry=1 means exit/close)
+            # entry: 0=in, 1=out, 2=reverse
+            if getattr(deal, "entry", 0) != 1:
+                continue
+
+            result.append({
+                "ticket": deal.ticket,
+                "order": getattr(deal, "order", 0),
+                "time": datetime.fromtimestamp(deal.time, tz=UTC),
+                "symbol": deal.symbol,
+                "type": deal.type,  # 0=buy, 1=sell
+                "volume": deal.volume,
+                "price": deal.price,
+                "profit": deal.profit,
+                "swap": getattr(deal, "swap", 0.0),
+                "commission": getattr(deal, "commission", 0.0),
+                "comment": getattr(deal, "comment", ""),
+                "position_id": getattr(deal, "position_id", 0),
+            })
+
+        return result

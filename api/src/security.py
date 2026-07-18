@@ -272,7 +272,9 @@ def create_token(user_id: str) -> str:
 def decode_token(token: str) -> dict[str, Any] | None:
     try:
         payload_raw, signature_raw = token.split(".", 1)
-        expected = hmac.new(app_secret_bytes(), payload_raw.encode("ascii"), hashlib.sha256).digest()
+        expected = hmac.new(
+            app_secret_bytes(), payload_raw.encode("ascii"), hashlib.sha256
+        ).digest()
         if not hmac.compare_digest(_b64url_decode(signature_raw), expected):
             return None
         payload = json.loads(_b64url_decode(payload_raw))

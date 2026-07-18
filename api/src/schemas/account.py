@@ -35,8 +35,7 @@ class TradeHistoryEntry(BaseModel):
     commission: float = 0.0
     opened_at: datetime
     closed_at: datetime
-    source: str = "telegram"  # telegram, dashboard, bot
-    telegram_msg_id: int | None = None
+    source: str = "mt5"
 
 
 class TradeHistoryResponse(BaseModel):

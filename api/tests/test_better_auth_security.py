@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from jwt.algorithms import RSAAlgorithm
 
 from src import security
 
@@ -16,7 +17,7 @@ AUDIENCE = "https://api.example.test"
 
 def _keypair():
     private = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_jwk = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(private.public_key()))
+    public_jwk = json.loads(RSAAlgorithm.to_jwk(private.public_key()))
     public_jwk.update({"kid": "test-key", "use": "sig", "alg": "RS256"})
     return private, jwt.PyJWK.from_dict(public_jwk)
 

@@ -1,85 +1,80 @@
-# Trading Dashboard API
+# Signal Copier API
 
-FastAPI backend for MT5 account/position/order operations, bot lifecycle control, trade history, and real-time dashboard updates.
-
-## Requirements
-
-- Python 3.12+
-- `uv` package manager
-- Reachable MT5 bridge/terminal:
-  - Linux: `gmag11/metatrader5_vnc` Docker container (RPyC on port 8001)
-  - macOS: `silicon-metatrader5` Docker container (port 8001)
-  - Windows: native MT5 terminal
+FastAPI backend for account-scoped MT5 operations and durable copy trading.
 
 ## Setup
 
 ```bash
-cd api
 cp .env.example .env
 uv sync
-```
-
-## Run
-
-```bash
-cd api
+uv run alembic upgrade head
 uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-API docs will be available at `http://localhost:8000/docs`.
+Copy-trading storage requires PostgreSQL. Existing SQLite trade history remains available to the legacy account/history endpoints and is stored under `TRADING_DATA_DIR` so container replacements do not discard it.
 
-## Environment Variables
+Public deployment probes:
 
-From `src/config.py` / `.env.example`:
+- `GET /api/health/` — secret-free API and database liveness summary.
+- `GET /api/health/ready` — returns HTTP 503 until PostgreSQL is reachable.
+- `GET /api/health/mt5` — authenticated account-specific MT5 health details.
 
-- `MT5_LOGIN`, `MT5_PASSWORD`, `MT5_SERVER`
-- `MT5_DOCKER_HOST`, `MT5_DOCKER_PORT`
-- `API_HOST`, `API_PORT`
-- `CORS_ORIGINS` (comma-separated)
-- `DEBUG`
-- `DATABASE_URL`
-- `BOT_DATA_DIR` (persistent runtime config/presets/state directory)
-- `BOT_STATE_FILE`
-- `CLERK_SECRET_KEY` to enable Clerk API authentication and invitations
-- `CLERK_ISSUER` or `CLERK_JWKS_URL` for Clerk JWT verification when not using the default JWKS URL
-- `CLERK_JWT_KEY` for offline Clerk JWT verification with a PEM public key
-- `CLERK_AUTHORIZED_PARTIES` comma-separated allowed dashboard origins
-- `DASHBOARD_PROXY_SECRET` shared with the dashboard server for same-origin API proxy auth
-- `ACCESS_BOOTSTRAP_EMAILS` comma-separated emails allowed to become the first Clerk owner
-- `ACCESS_REQUIRE_INVITE=true` to disable Clerk self-service access for new users
-- `ACCESS_SELF_SIGNUP_ROLE` default role for self-service Clerk users (`trader` by default)
+## Copy-trading endpoints
 
-The dashboard service also needs `CLERK_SECRET_KEY` because Clerk's Next.js middleware
-runs on the dashboard server. The dashboard and API must also share the same
-`DASHBOARD_PROXY_SECRET`; do not reuse the Clerk secret for that value.
+- `GET /api/copy/directory` — neutral searchable trader directory with broker-derived statistics.
+- `POST/PATCH /api/copy/traders` — opt in or stop sharing a connected account.
+- `POST/PATCH /api/copy/subscriptions` — create, pause, resume, or drain a copy relationship.
+- `POST /api/copy/subscriptions/{id}/activate-live` — checklist-backed live activation.
+- `GET/PUT /api/copy/accounts/{accountId}/risk-policy` — guided risk presets and hard caps.
+- `GET /api/copy/overview` and `GET /api/copy/executions` — current status and execution history.
+- `POST /api/copy/accounts/{accountId}/emergency-stop` — pause opens or explicitly close all copied positions.
+- `POST /api/internal/copy/runtime/heartbeat` and `/events` — authenticated runtime traffic.
 
-## Main Endpoints
+Former Telegram, Bot, Analysis, Prompts, and Platform API paths return `410 Gone` for the deprecation release.
 
-- Health: `/api/health`
-- Positions: `/api/positions`
-- Orders: `/api/orders`
-- Account & history: `/api/account`
-- Symbols: `/api/symbols`
-- Telegram tools: `/api/telegram`
-- Bot control/status: `/api/bot`
-- Runtime config/presets: `/api/config`
-- Analysis: `/api/analysis`
-- Access management: `/api/access`
+## Runtime contract
 
-## Persistence (Dokploy)
+Each connected MT5 account has its own managed runtime. Heartbeats include account balance, copy P&L for the day, combined copied-position risk, symbol specifications, and optional verified statistics:
 
-Mount a persistent volume to `/app/data` on the `trading-api` service.
-The API stores runtime bot config, presets, and bot state there so redeploys do not reset them.
+```json
+{
+  "balance": 10000,
+  "daily_copy_pnl": -25,
+  "copy_open_risk_pct": 0.5,
+  "markets": ["XAUUSD", "EURUSD"],
+  "verified_statistics": {
+    "return_90d_pct": 8.4,
+    "max_drawdown_pct": 4.1,
+    "track_record_days": 420,
+    "trade_count": 286
+  },
+  "symbol_specs": {
+    "XAUUSD": {
+      "value_per_price_unit_per_lot": 10,
+      "volume_min": 0.01,
+      "volume_max": 100,
+      "volume_step": 0.01
+    }
+  }
+}
+```
 
-## WebSockets
+The worker blocks missing stops, unavailable symbol specifications, broker volume violations, daily-loss breaches, combined open-risk breaches, and unhealthy runtimes with stable reason codes.
 
-- `ws://localhost:8000/ws` — account/position updates
-- `ws://localhost:8000/ws/logs` — live bot log stream
+## Environment
 
-## Development
+- `DATABASE_URL` — PostgreSQL URL for marketplace data and Alembic migrations.
+- `PAPER_LIVE_ENABLED=false` — deployment-level live-copying gate.
+- `COPY_RUNTIME_INGEST_TOKEN` — bearer token for runtime heartbeats/events.
+- `COPY_RUNTIME_MANAGER_URL` and `COPY_RUNTIME_MANAGER_TOKEN` — restricted execution control plane.
+- `TRADING_DATA_DIR=/app/data` — persistent compatibility data and the one-time legacy archive source.
+
+Country eligibility and disclosure versions are stored in `app.copy_jurisdiction_policies`. An empty table denies every live activation.
+
+## Verification
 
 ```bash
-cd api
+TEST_DATABASE_URL=postgresql+asyncpg://... uv run pytest
 uv run ruff check .
-uv run pytest
+uv run pyright
 ```
