@@ -13,6 +13,7 @@ interface ModifyDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (sl: number, tp: number) => Promise<void>;
+  onClosePosition?: () => Promise<void>;
   isLoading?: boolean;
 }
 
@@ -21,6 +22,7 @@ function ModifyForm({
   position,
   onClose,
   onSubmit,
+  onClosePosition,
   isLoading,
 }: Omit<ModifyDialogProps, "isOpen">) {
   const [sl, setSl] = useState(
@@ -29,6 +31,7 @@ function ModifyForm({
   const [tp, setTp] = useState(
     position?.tp && position.tp > 0 ? position.tp.toString() : ""
   );
+  const [confirmingClose, setConfirmingClose] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -47,7 +50,7 @@ function ModifyForm({
           <SymbolIcon symbol={position.symbol} size="lg" />
           <div>
             <p className="font-semibold text-text-primary">{position.symbol}</p>
-            <p className="text-xs text-text-muted">#{position.ticket}</p>
+            <p className="text-xs text-text-muted">Trade #{position.ticket}</p>
           </div>
           <Badge variant={isBuy ? "success" : "danger"} className="ml-auto gap-1">
             {isBuy ? (
@@ -61,11 +64,11 @@ function ModifyForm({
 
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 rounded-lg bg-bg-elevated">
-            <p className="text-[10px] text-text-muted uppercase tracking-wide mb-1">Volume</p>
-            <p className="text-sm font-medium text-text-primary tabular-nums">{position.volume}</p>
+            <p className="text-[10px] text-text-muted uppercase tracking-wide mb-1">Trade size</p>
+            <p className="text-sm font-medium text-text-primary tabular-nums">{position.volume} lots</p>
           </div>
           <div className="p-3 rounded-lg bg-bg-elevated">
-            <p className="text-[10px] text-text-muted uppercase tracking-wide mb-1">Entry Price</p>
+            <p className="text-[10px] text-text-muted uppercase tracking-wide mb-1">Opening price</p>
             <p className="text-sm font-medium text-text-primary tabular-nums font-mono">
               {position.price_open.toFixed(5)}
             </p>
@@ -81,7 +84,7 @@ function ModifyForm({
               <Shield className="w-3 h-3 text-danger" />
             </div>
             <label className="text-xs font-medium text-text-secondary uppercase tracking-wide">
-              Stop Loss
+              Automatic loss limit <span className="normal-case text-text-muted">(stop loss)</span>
             </label>
           </div>
           <input
@@ -89,7 +92,7 @@ function ModifyForm({
             step="0.00001"
             value={sl}
             onChange={(e) => setSl(e.target.value)}
-            placeholder="Enter stop loss price"
+            placeholder="Price where this trade should close"
             className="w-full h-11 px-4 rounded-xl border bg-bg-tertiary text-text-primary text-sm tabular-nums border-border-subtle placeholder:text-text-muted focus:outline-none focus:border-danger/50 focus:ring-1 focus:ring-danger/20 transition-colors duration-200"
           />
         </div>
@@ -100,7 +103,7 @@ function ModifyForm({
               <Target className="w-3 h-3 text-success" />
             </div>
             <label className="text-xs font-medium text-text-secondary uppercase tracking-wide">
-              Take Profit
+              Automatic profit target <span className="normal-case text-text-muted">(take profit)</span>
             </label>
           </div>
           <input
@@ -108,7 +111,7 @@ function ModifyForm({
             step="0.00001"
             value={tp}
             onChange={(e) => setTp(e.target.value)}
-            placeholder="Enter take profit price"
+            placeholder="Price where profit should be taken"
             className="w-full h-11 px-4 rounded-xl border bg-bg-tertiary text-text-primary text-sm tabular-nums border-border-subtle placeholder:text-text-muted focus:outline-none focus:border-success/50 focus:ring-1 focus:ring-success/20 transition-colors duration-200"
           />
         </div>
@@ -137,10 +140,52 @@ function ModifyForm({
               <span>Saving...</span>
             </div>
           ) : (
-            "Save Changes"
+            "Save protection"
           )}
         </Button>
       </div>
+
+      {onClosePosition && (
+        <div className="border-t border-border-subtle pt-4">
+          {confirmingClose ? (
+            <div className="rounded-xl border border-danger/25 bg-danger/8 p-4">
+              <p className="text-sm font-medium text-text-primary">Close this trade now?</p>
+              <p className="mt-1 text-xs leading-5 text-text-muted">
+                Your broker will close it at the next available market price.
+              </p>
+              <div className="mt-4 flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setConfirmingClose(false)}
+                  disabled={isLoading}
+                >
+                  Keep trade open
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  className="flex-1"
+                  onClick={onClosePosition}
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Closing…" : "Close trade"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmingClose(true)}
+              disabled={isLoading}
+              className="text-xs font-medium text-danger hover:text-danger/80 disabled:opacity-50"
+            >
+              Close this trade
+            </button>
+          )}
+        </div>
+      )}
     </form>
   );
 }
@@ -150,18 +195,20 @@ export function ModifyDialog({
   isOpen,
   onClose,
   onSubmit,
+  onClosePosition,
   isLoading,
 }: ModifyDialogProps) {
   if (!position) return null;
 
   return (
-    <Dialog isOpen={isOpen} onClose={onClose} title="Modify Position">
+    <Dialog isOpen={isOpen} onClose={onClose} title="Review trade">
       {/* Use key to reset form state when position changes */}
       <ModifyForm
         key={position.ticket}
         position={position}
         onClose={onClose}
         onSubmit={onSubmit}
+        onClosePosition={onClosePosition}
         isLoading={isLoading}
       />
     </Dialog>

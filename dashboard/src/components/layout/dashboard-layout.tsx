@@ -24,9 +24,18 @@ import {
   type AuthSession,
 } from "@/lib/auth-storage";
 import { setBetterAuthTokenProvider, setClerkTokenProvider } from "@/lib/clerk-token";
+import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 import type { Position, AccountInfo } from "@/types";
 import { Bell, Search, ChevronDown, Loader2, LogOut, Plus, UserRound } from "lucide-react";
 
@@ -46,6 +55,7 @@ interface DashboardContextType {
   reconnect: () => void;
   session: AuthSession;
   setSession: (session: AuthSession) => void;
+  designPreview?: boolean;
 }
 
 const DashboardContext = createContext<DashboardContextType | null>(null);
@@ -68,10 +78,61 @@ const HEADER_SYMBOLS = [
   { base: "GBPUSD", label: "GBP/USD" },
 ];
 
+const subscribeToPreviewState = () => () => undefined;
+
+function getHomePreviewState(): "connected" | "setup" | null {
+  if (
+    typeof window === "undefined" ||
+    process.env.NEXT_PUBLIC_COPY_TRADING_PREVIEW !== "true" ||
+    window.location.pathname !== "/"
+  ) {
+    return null;
+  }
+
+  return new URLSearchParams(window.location.search).get("previewHome") === "setup"
+    ? "setup"
+    : "connected";
+}
+
 export function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
+  const homePreviewState = useSyncExternalStore(
+    subscribeToPreviewState,
+    getHomePreviewState,
+    () => null
+  );
+
   if (pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) {
     return <>{children}</>;
+  }
+
+  if (
+    process.env.NEXT_PUBLIC_COPY_TRADING_PREVIEW === "true" &&
+    pathname === "/"
+  ) {
+    if (!homePreviewState) {
+      return (
+        <main className="min-h-screen bg-bg-primary flex items-center justify-center">
+          <p className="text-sm text-text-muted">Opening home preview…</p>
+        </main>
+      );
+    }
+    return (
+      <DashboardPreviewLayout state={homePreviewState}>
+        {children}
+      </DashboardPreviewLayout>
+    );
+  }
+
+  if (
+    process.env.NEXT_PUBLIC_COPY_TRADING_PREVIEW === "true" &&
+    pathname === "/positions"
+  ) {
+    return (
+      <DashboardPreviewLayout state="connected">
+        {children}
+      </DashboardPreviewLayout>
+    );
   }
 
   if (
@@ -136,6 +197,120 @@ function CopyTradingPreviewLayout({ children }: DashboardLayoutProps) {
               <Search className="h-4 w-4 text-text-muted" />
               <span className="px-3 py-2.5 text-sm text-text-muted">Search symbols, tickets…</span>
             </div>
+            <div className="rounded-xl border border-border-subtle bg-bg-secondary/55 px-3 py-2 text-sm text-text-secondary">
+              Live Account
+            </div>
+          </header>
+          <main className="p-4 pb-24 md:pb-4 lg:p-6">{children}</main>
+        </div>
+      </div>
+    </DashboardContext.Provider>
+  );
+}
+
+function DashboardPreviewLayout({
+  children,
+  state,
+}: DashboardLayoutProps & { state: "connected" | "setup" }) {
+  const connected = state === "connected";
+  const previewSession: AuthSession = {
+    token: "design-preview",
+    user: { id: "design-preview", email: "alex@example.com", role: "owner" },
+    accounts: [
+      {
+        id: "preview-live",
+        user_id: "design-preview",
+        name: "Live Account",
+        setup_complete: connected,
+      },
+    ],
+    activeAccountId: "preview-live",
+    setupComplete: connected,
+  };
+  const previewAccount: AccountInfo | null = connected
+    ? {
+        balance: 12_462.25,
+        equity: 12_480.95,
+        margin: 94.2,
+        free_margin: 12_386.4,
+        profit: 18.7,
+      }
+    : null;
+  const previewPositions: Position[] = connected
+    ? [
+        {
+          ticket: 1001,
+          symbol: "XAUUSD",
+          type: "buy",
+          volume: 0.02,
+          price_open: 2410,
+          price_current: 2414.5,
+          sl: 2398,
+          tp: 2430,
+          profit: 14.2,
+          swap: 0,
+          time: null,
+        },
+        {
+          ticket: 1002,
+          symbol: "EURUSD",
+          type: "buy",
+          volume: 0.05,
+          price_open: 1.086,
+          price_current: 1.087,
+          sl: 0,
+          tp: 1.094,
+          profit: 4.5,
+          swap: 0,
+          time: null,
+        },
+      ]
+    : [];
+
+  return (
+    <DashboardContext.Provider
+      value={{
+        positions: previewPositions,
+        account: previewAccount,
+        isConnected: connected,
+        error: null,
+        reconnect: () => undefined,
+        session: previewSession,
+        setSession: () => undefined,
+        designPreview: true,
+      }}
+    >
+      <div className="flex min-h-screen bg-bg-primary">
+        <Sidebar isConnected={connected} accountName="Live Account" accountInitials="LA" />
+        <MobileNav />
+        <div className="min-w-0 flex-1">
+          <header className="sticky top-0 z-30 flex h-[72px] items-center gap-4 border-b border-border-subtle bg-bg-primary/90 px-5 backdrop-blur-xl lg:px-7">
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Live Account</p>
+              <p className={cn("mt-0.5 text-[11px]", connected ? "text-success" : "text-text-muted")}>
+                {connected ? "MT5 connected" : "Account setup required"}
+              </p>
+            </div>
+            <div className="ml-auto hidden w-full max-w-sm items-center rounded-xl border border-border-subtle bg-bg-secondary/60 px-3 md:flex">
+              <Search className="h-4 w-4 text-text-muted" />
+              <span className="px-3 py-2.5 text-sm text-text-muted">Search symbols, tickets…</span>
+            </div>
+            {connected && (
+              <div className="hidden items-center gap-2 xl:flex">
+                {HEADER_SYMBOLS.map((symbol) => (
+                  <div
+                    key={symbol.base}
+                    className="flex items-center gap-2 rounded-xl border border-border-subtle bg-bg-secondary/55 px-2.5 py-1.5"
+                  >
+                    <SymbolIcon symbol={symbol.base} size="sm" className="h-7 w-7 rounded-lg" />
+                    <span className="text-xs font-medium text-text-secondary">{symbol.label}</span>
+                  </div>
+                ))}
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-border-subtle bg-bg-secondary/55 text-text-muted">
+                  <Bell className="h-4 w-4" />
+                </span>
+              </div>
+            )}
             <div className="rounded-xl border border-border-subtle bg-bg-secondary/55 px-3 py-2 text-sm text-text-secondary">
               Live Account
             </div>
@@ -423,8 +598,9 @@ function AuthenticatedDashboardLayout({
   const router = useRouter();
   const isSetupRoute = pathname.startsWith("/setup");
   const isPlatformRoute = pathname.startsWith("/copy-trading");
-  const needsSetup = !session.setupComplete;
-  const shouldForceSetup = needsSetup && !isSetupRoute && !isPlatformRoute;
+  const isHomeRoute = pathname === "/";
+  const needsSetup = !session.setupComplete || !session.activeAccountId;
+  const shouldForceSetup = needsSetup && !isHomeRoute && !isSetupRoute && !isPlatformRoute;
   const { positions, account, isConnected, error, reconnect } = useWebSocket({
     enabled: session.setupComplete && Boolean(session.activeAccountId),
     token: session.token,

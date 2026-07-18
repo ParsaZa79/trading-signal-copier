@@ -10,6 +10,7 @@ export interface ChartPoint {
 interface EquityChartProps {
   data: ChartPoint[];
   positive?: boolean;
+  tone?: "performance" | "accent";
   className?: string;
   height?: number;
 }
@@ -17,6 +18,7 @@ interface EquityChartProps {
 export function EquityChart({
   data,
   positive = true,
+  tone = "performance",
   className,
   height = 120,
 }: EquityChartProps) {
@@ -53,8 +55,14 @@ export function EquityChart({
     .join(" ");
 
   const areaPoints = `0,${height} ${points} ${width},${height}`;
-  const stroke = positive ? "var(--success)" : "var(--danger)";
-  const fill = positive ? "var(--success-muted)" : "var(--danger-muted)";
+  const stroke =
+    tone === "accent" ? "var(--accent)" : positive ? "var(--success)" : "var(--danger)";
+  const fill =
+    tone === "accent"
+      ? "var(--accent-subtle)"
+      : positive
+        ? "var(--success-muted)"
+        : "var(--danger-muted)";
 
   return (
     <div className={cn("relative w-full", className)} style={{ height }}>
