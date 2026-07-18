@@ -47,7 +47,7 @@ const EMPTY_CONFIG = {
 
 type SetupConfig = typeof EMPTY_CONFIG;
 
-export default function SetupPage() {
+export function AccountSetupContent({ editMode = false }: { editMode?: boolean }) {
   const router = useRouter();
   const { session, setSession } = useDashboard();
   const [accountName, setAccountName] = useState("Live Account");
@@ -194,7 +194,11 @@ export default function SetupPage() {
       await completeAccountSetup();
       const refreshed = await getMe();
       setSession(refreshed);
-      router.replace("/");
+      if (editMode) {
+        setMessage("Account setup saved and broker connection verified.");
+      } else {
+        router.replace("/");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not complete setup");
       setMessage(null);
@@ -216,8 +220,12 @@ export default function SetupPage() {
       <AnimatedSection>
         <PageHeader
           meta="Account setup"
-          title="Connect your broker"
-          description="Complete this once for each MT5 account you want to use for copying or sharing trades."
+          title={editMode ? "Manage your broker account" : "Connect your broker"}
+          description={
+            editMode
+              ? "Review or update the MetaTrader 5 connection for the selected account."
+              : "Complete this once for each MT5 account you want to use for copying or sharing trades."
+          }
         />
       </AnimatedSection>
 
@@ -307,7 +315,13 @@ export default function SetupPage() {
 
           <Button type="submit" variant="accent" disabled={isSubmitting} className="w-full sm:w-auto">
             {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-            <span>{isSubmitting ? "Testing setup" : "Save & test broker"}</span>
+            <span>
+              {isSubmitting
+                ? "Testing setup"
+                : editMode
+                  ? "Save & test connection"
+                  : "Save & test broker"}
+            </span>
           </Button>
         </form>
 
@@ -338,6 +352,10 @@ export default function SetupPage() {
       </AnimatedSection>
     </PageContainer>
   );
+}
+
+export default function SetupPage() {
+  return <AccountSetupContent />;
 }
 
 function GuideLink({ href, label }: { href: string; label: string }) {
