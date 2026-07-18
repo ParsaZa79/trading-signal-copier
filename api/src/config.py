@@ -7,7 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from .runtime_data import CACHE_PATH, STATE_PATH
+from .runtime_data import CACHE_PATH
 
 # Load .env file
 load_dotenv()
@@ -116,15 +116,6 @@ class Config:
     api: APIConfig = field(default_factory=APIConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     features: FeatureFlags = field(default_factory=FeatureFlags)
-
-    # Path to bot state file
-    bot_state_file: str = field(
-        default_factory=lambda: os.getenv(
-            "BOT_STATE_FILE",
-            str(STATE_PATH),
-        )
-    )
-
 
 # Global config instance
 config = Config()

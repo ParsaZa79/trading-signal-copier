@@ -12,7 +12,7 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Signal Copier | Dashboard",
-  description: "MT5 trading bot dashboard",
+  description: "Beginner-first MT5 copy trading dashboard",
 };
 
 export default function RootLayout({

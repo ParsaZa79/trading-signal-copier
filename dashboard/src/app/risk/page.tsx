@@ -1,7 +1,5 @@
-"use client";
+import { redirect } from "next/navigation";
 
-import PlatformPage from "../platform/page";
-
-export default function RiskPage() {
-  return <PlatformPage />;
+export default function RiskRedirect() {
+  redirect("/copy-trading");
 }

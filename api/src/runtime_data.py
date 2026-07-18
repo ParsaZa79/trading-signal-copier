@@ -1,4 +1,4 @@
-"""Shared runtime data paths for bot config, presets, and state files."""
+"""Shared runtime data paths for account configuration and legacy imports."""
 
 from __future__ import annotations
 
@@ -7,42 +7,36 @@ import shutil
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-BOT_DIR = REPO_ROOT / "bot"
-ENV_PATH = BOT_DIR / ".env"
+LOCAL_DATA_DIR = REPO_ROOT / ".runtime-data"
+LEGACY_SIGNAL_APP_DIR = REPO_ROOT / "bot"
+ENV_PATH = LEGACY_SIGNAL_APP_DIR / ".env"
 
 
 def _resolve_data_dir() -> Path:
     """Resolve persistent data directory.
 
     Priority:
-    1) BOT_DATA_DIR env var
+    1) TRADING_DATA_DIR env var
     2) /app/data when running in containerized deployments
-    3) repo-local bot directory for local development
+    3) repo-local runtime directory for local development
     """
-    configured = os.getenv("BOT_DATA_DIR", "").strip()
+    configured = os.getenv("TRADING_DATA_DIR", "").strip()
     if configured:
         return Path(configured).expanduser()
     if Path("/app").exists():
         return Path("/app/data")
-    return BOT_DIR
+    return LOCAL_DATA_DIR
 
 
 DATA_DIR = _resolve_data_dir()
 ACCOUNTS_DIR = DATA_DIR / "accounts"
-PID_FILE = DATA_DIR / ".bot.pid"
-STATE_PATH = DATA_DIR / "bot_state.json"
 CACHE_PATH = DATA_DIR / "bot_config_cache.json"
 PRESETS_DIR = DATA_DIR / "presets"
 LAST_PRESET_PATH = PRESETS_DIR / "_last_preset.json"
 
-# Legacy locations inside /bot in older deployments
-LEGACY_CACHE_PATH = BOT_DIR / ".env.gui_cache.json"
-LEGACY_PRESETS_DIR = BOT_DIR / ".presets"
-LEGACY_STATE_PATH = BOT_DIR / "bot_state.json"
-LEGACY_SESSION_PATHS = [
-    DATA_DIR / "signal_bot_session.session",
-    BOT_DIR / "signal_bot_session.session",
-]
+# Legacy locations retained only for an idempotent one-time config import.
+LEGACY_CACHE_PATH = LEGACY_SIGNAL_APP_DIR / ".env.gui_cache.json"
+LEGACY_PRESETS_DIR = LEGACY_SIGNAL_APP_DIR / ".presets"
 
 
 def account_dir(account_id: str) -> Path:
@@ -53,16 +47,6 @@ def account_dir(account_id: str) -> Path:
 def account_config_path(account_id: str) -> Path:
     """Return the encrypted runtime config path for an account."""
     return account_dir(account_id) / "config.json"
-
-
-def account_pid_file(account_id: str) -> Path:
-    """Return the bot PID file path for an account."""
-    return account_dir(account_id) / ".bot.pid"
-
-
-def account_state_path(account_id: str) -> Path:
-    """Return the bot state path for an account."""
-    return account_dir(account_id) / "bot_state.json"
 
 
 def account_presets_dir(account_id: str) -> Path:
@@ -90,33 +74,6 @@ def account_analysis_outcomes_path(account_id: str) -> Path:
     return account_analysis_dir(account_id) / "signals_outcomes.json"
 
 
-def account_telegram_session_name(account_id: str) -> Path:
-    """Return the Telegram session base path without the .session suffix."""
-    return account_dir(account_id) / "signal_bot_session"
-
-
-def account_telegram_session_path(account_id: str) -> Path:
-    """Return the Telegram .session path for an account."""
-    return account_telegram_session_name(account_id).with_suffix(".session")
-
-
-def shared_telegram_session_name() -> Path:
-    """Return the shared Telegram session base path without the .session suffix."""
-    data_session = DATA_DIR / "signal_bot_session"
-    bot_session = BOT_DIR / "signal_bot_session"
-    if (
-        data_session.with_suffix(".session").exists()
-        or not bot_session.with_suffix(".session").exists()
-    ):
-        return data_session
-    return bot_session
-
-
-def shared_telegram_session_path() -> Path:
-    """Return the shared Telegram .session path."""
-    return shared_telegram_session_name().with_suffix(".session")
-
-
 def _copy_file_if_missing(source: Path, target: Path) -> None:
     if not source.exists() or target.exists():
         return
@@ -140,7 +97,6 @@ def bootstrap_runtime_data() -> None:
     ACCOUNTS_DIR.mkdir(parents=True, exist_ok=True)
     PRESETS_DIR.mkdir(parents=True, exist_ok=True)
     _copy_file_if_missing(LEGACY_CACHE_PATH, CACHE_PATH)
-    _copy_file_if_missing(LEGACY_STATE_PATH, STATE_PATH)
     _migrate_legacy_presets()
 
 

@@ -132,8 +132,8 @@ export function OrderForm({ onSuccess, accountId }: OrderFormProps) {
               label="Symbol"
               options={symbols}
               value={formData.symbol}
-              onChange={(e) =>
-                setFormData({ ...formData, symbol: e.target.value })
+              onValueChange={(nextValue) =>
+                setFormData({ ...formData, symbol: nextValue })
               }
             />
           )}
@@ -142,10 +142,10 @@ export function OrderForm({ onSuccess, accountId }: OrderFormProps) {
             label="Order type"
             options={ORDER_TYPES}
             value={formData.order_type}
-            onChange={(e) =>
+            onValueChange={(nextValue) =>
               setFormData({
                 ...formData,
-                order_type: e.target.value as OrderType,
+                order_type: nextValue as OrderType,
               })
             }
           />

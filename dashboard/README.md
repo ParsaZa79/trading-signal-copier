@@ -1,6 +1,6 @@
 # Trading Dashboard (Next.js)
 
-Frontend UI for monitoring account performance, open positions, orders, trade history, and bot status/control.
+Frontend UI for beginner-first trader discovery, guided copy setup, MT5 accounts, positions, orders, and trade history.
 
 ## Requirements
 
@@ -38,6 +38,7 @@ NEXT_PUBLIC_STRATEGY_LAB_ENABLED=false
 BETTER_AUTH_ENABLED=false
 STRATEGY_LAB_ENABLED=false
 OPEN_SIGNUP_ENABLED=false
+NEXT_PUBLIC_COPY_TRADING_PREVIEW=false
 ```
 
 If omitted, these defaults are used by `src/lib/constants.ts`.
@@ -135,11 +136,21 @@ never in committed env files or Docker build arguments.
 - `bun run auth:schema:validate` — Validate committed auth migrations
 - `bun run auth:schema:apply` — Transactionally apply auth migrations
 
+## Copy-trading preview
+
+Use realistic marketplace data without bypassing production authentication:
+
+```bash
+NEXT_PUBLIC_COPY_TRADING_PREVIEW=true bun run dev
+```
+
+Then open `http://localhost:3000/copy-trading?preview=1`. The build-time flag defaults to `false` and is not enabled in the production Docker image.
+
 ## API Integration
 
 The dashboard expects:
 
 - REST endpoints under `/api/*` on the backend
-- WebSocket streams at `/ws` and `/ws/logs`
+- Account update WebSocket stream at `/ws`
 
 Ensure the API service is running before using data-driven pages.

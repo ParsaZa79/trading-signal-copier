@@ -19,27 +19,17 @@ from .runtime_data import (
     DATA_DIR,
     ENV_PATH,
     LAST_PRESET_PATH,
-    LEGACY_SESSION_PATHS,
-    PID_FILE,
     PRESETS_DIR,
-    STATE_PATH,
     account_config_path,
     account_dir,
     account_last_preset_path,
-    account_pid_file,
     account_presets_dir,
-    account_state_path,
-    account_telegram_session_path,
 )
 from .security import (
     app_secret_bytes,
     get_current_user,
     get_requested_account_id,
     set_active_account_id,
-)
-from .shared_telegram import (
-    shared_telegram_missing_fields,
-    strip_account_telegram_values,
 )
 
 ACCOUNTS_PATH = DATA_DIR / "accounts.json"
@@ -49,12 +39,22 @@ BROKER_SETUP_FIELDS = ("MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER")
 
 SECRET_FIELD_NAMES = {
     "MT5_PASSWORD",
-    "TELEGRAM_API_HASH",
     "GROQ_API_KEY",
     "CEREBRAS_API_KEY",
     "OPENAI_API_KEY",
 }
 SECRET_KEYWORDS = ("PASSWORD", "SECRET", "TOKEN", "API_KEY", "PRIVATE_KEY")
+OBSOLETE_SIGNAL_KEYS = {
+    "TELEGRAM_API_ID",
+    "TELEGRAM_API_HASH",
+    "TELEGRAM_CHANNEL",
+    "TELEGRAM_SESSION_NAME",
+}
+
+
+def _without_obsolete_signal_ingestion(values: dict[str, Any]) -> dict[str, Any]:
+    """Drop legacy Telegram settings while reading or updating an account."""
+    return {key: value for key, value in values.items() if key not in OBSOLETE_SIGNAL_KEYS}
 
 
 def _utc_now() -> str:
@@ -201,15 +201,15 @@ def _read_env_file() -> dict[str, str]:
 def load_account_config(account_id: str, *, reveal_secrets: bool) -> dict[str, str]:
     path = account_config_path(account_id)
     payload = _read_json(path, {})
-    return strip_account_telegram_values(decode_config(payload, reveal_secrets=reveal_secrets))
+    return _without_obsolete_signal_ingestion(decode_config(payload, reveal_secrets=reveal_secrets))
 
 
 def save_account_config(account_id: str, values: dict[str, Any]) -> dict[str, str]:
     path = account_config_path(account_id)
     existing = _read_json(path, {})
-    merged = strip_account_telegram_values(decode_config(existing, reveal_secrets=True))
+    merged = _without_obsolete_signal_ingestion(decode_config(existing, reveal_secrets=True))
 
-    for key, raw_value in strip_account_telegram_values(values).items():
+    for key, raw_value in _without_obsolete_signal_ingestion(values).items():
         value = "" if raw_value is None else str(raw_value)
         if is_secret_key(str(key)) and value in {"", MASKED_SECRET}:
             continue
@@ -225,7 +225,6 @@ def _is_account_setup_complete(account_id: str) -> bool:
     return (
         bool(values.get(SETUP_COMPLETED_KEY))
         and all(values.get(key) for key in BROKER_SETUP_FIELDS)
-        and not shared_telegram_missing_fields()
     )
 
 
@@ -294,12 +293,6 @@ def _migrate_legacy_runtime(account_id: str) -> None:
     if legacy_config and not account_config_path(account_id).exists():
         save_account_config(account_id, legacy_config)
 
-    _copy_file_if_missing(STATE_PATH, account_state_path(account_id))
-    _copy_file_if_missing(PID_FILE, account_pid_file(account_id))
-
-    for legacy_session in LEGACY_SESSION_PATHS:
-        _copy_file_if_missing(legacy_session, account_telegram_session_path(account_id))
-
     if PRESETS_DIR.exists():
         target_presets = account_presets_dir(account_id)
         target_presets.mkdir(parents=True, exist_ok=True)
@@ -361,15 +354,13 @@ def ensure_default_account(user: dict[str, Any]) -> dict[str, Any]:
 def account_setup_status(account: dict[str, Any]) -> dict[str, Any]:
     values = load_account_config(account["id"], reveal_secrets=True)
     broker_missing = [key for key in BROKER_SETUP_FIELDS if not values.get(key)]
-    telegram_missing = shared_telegram_missing_fields()
-    missing_fields = [*broker_missing, *telegram_missing]
+    missing_fields = [*broker_missing]
     if not values.get(SETUP_COMPLETED_KEY):
         missing_fields.append(SETUP_COMPLETED_KEY)
     return {
         "account": _sanitize_account(account),
         "setup_complete": not missing_fields,
         "broker_configured": not broker_missing,
-        "telegram_configured": not telegram_missing,
         "missing_fields": missing_fields,
     }
 
@@ -404,10 +395,6 @@ def mark_account_setup_complete(account_id: str) -> dict[str, Any]:
     missing = [key for key in BROKER_SETUP_FIELDS if not values.get(key)]
     if missing:
         raise ValueError(f"Missing broker setup fields: {', '.join(missing)}")
-
-    shared_missing = shared_telegram_missing_fields()
-    if shared_missing:
-        raise ValueError(f"Shared Telegram configuration is missing: {', '.join(shared_missing)}")
 
     save_account_config(account_id, {SETUP_COMPLETED_KEY: _utc_now()})
     return account_setup_status(account)

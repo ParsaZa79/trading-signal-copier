@@ -1,6 +1,6 @@
 "use client";
 
-import { Sidebar } from "./sidebar";
+import { MobileNav, Sidebar } from "./sidebar";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { AuthScreen } from "@/components/auth/auth-screen";
 import { SymbolIcon } from "@/components/dashboard/symbol-icon";
@@ -74,6 +74,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return <>{children}</>;
   }
 
+  if (
+    process.env.NEXT_PUBLIC_COPY_TRADING_PREVIEW === "true" &&
+    pathname.startsWith("/copy-trading")
+  ) {
+    return <CopyTradingPreviewLayout>{children}</CopyTradingPreviewLayout>;
+  }
+
   if (CLERK_ENABLED) {
     return <ClerkDashboardLayout>{children}</ClerkDashboardLayout>;
   }
@@ -83,6 +90,61 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   return <LocalAuthDashboardLayout>{children}</LocalAuthDashboardLayout>;
+}
+
+function CopyTradingPreviewLayout({ children }: DashboardLayoutProps) {
+  const previewSession: AuthSession = {
+    token: "design-preview",
+    user: { id: "design-preview", email: "preview@example.com", role: "owner" },
+    accounts: [
+      { id: "preview-live", user_id: "design-preview", name: "Live Account", setup_complete: true },
+      { id: "preview-growth", user_id: "design-preview", name: "Growth Account", setup_complete: true },
+    ],
+    activeAccountId: "preview-live",
+    setupComplete: true,
+  };
+  const previewAccount: AccountInfo = {
+    balance: 10_000,
+    equity: 10_000,
+    margin: 0,
+    free_margin: 10_000,
+    profit: 0,
+  };
+
+  return (
+    <DashboardContext.Provider
+      value={{
+        positions: [],
+        account: previewAccount,
+        isConnected: true,
+        error: null,
+        reconnect: () => undefined,
+        session: previewSession,
+        setSession: () => undefined,
+      }}
+    >
+      <div className="flex min-h-screen bg-bg-primary">
+        <Sidebar isConnected accountName="Live Account" accountInitials="LS" />
+        <MobileNav />
+        <div className="min-w-0 flex-1">
+          <header className="sticky top-0 z-30 flex h-[72px] items-center justify-between border-b border-border-subtle bg-bg-primary/90 px-5 backdrop-blur-xl lg:px-7">
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Live Account</p>
+              <p className="mt-0.5 text-[11px] text-success">MT5 connected</p>
+            </div>
+            <div className="hidden w-full max-w-sm items-center rounded-xl border border-border-subtle bg-bg-secondary/60 px-3 md:flex">
+              <Search className="h-4 w-4 text-text-muted" />
+              <span className="px-3 py-2.5 text-sm text-text-muted">Search symbols, tickets…</span>
+            </div>
+            <div className="rounded-xl border border-border-subtle bg-bg-secondary/55 px-3 py-2 text-sm text-text-secondary">
+              Live Account
+            </div>
+          </header>
+          <main className="p-4 pb-24 md:pb-4 lg:p-6">{children}</main>
+        </div>
+      </div>
+    </DashboardContext.Provider>
+  );
 }
 
 function LocalAuthDashboardLayout({ children }: DashboardLayoutProps) {
@@ -360,8 +422,7 @@ function AuthenticatedDashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const isSetupRoute = pathname.startsWith("/setup");
-  const isPlatformRoute =
-    pathname.startsWith("/platform") || pathname.startsWith("/copy-trading") || pathname.startsWith("/risk");
+  const isPlatformRoute = pathname.startsWith("/copy-trading");
   const needsSetup = !session.setupComplete;
   const shouldForceSetup = needsSetup && !isSetupRoute && !isPlatformRoute;
   const { positions, account, isConnected, error, reconnect } = useWebSocket({
@@ -494,7 +555,11 @@ function AuthenticatedDashboardLayout({
       value={{ positions, account, isConnected: mt5Connected, error, reconnect, session, setSession }}
     >
       <div className="flex min-h-screen">
-        <Sidebar isConnected={mt5Connected} />
+        <Sidebar
+          isConnected={mt5Connected}
+          accountName={visibleActiveAccount?.name || (needsSetup ? "Account Setup" : "Live Account")}
+        />
+        <MobileNav />
 
         <div className="flex-1 flex flex-col min-h-screen">
           <header className="h-14 border-b border-border-subtle bg-bg-primary/70 backdrop-blur-xl sticky top-0 z-40">
@@ -646,7 +711,7 @@ function AuthenticatedDashboardLayout({
             </div>
           </header>
 
-          <main className="flex-1 p-4 lg:p-6 overflow-auto">
+          <main className="flex-1 overflow-auto p-4 pb-24 md:pb-4 lg:p-6">
             {error && (
               <div className="mb-6 p-4 rounded-xl bg-danger/10 border border-danger/30 flex items-center justify-between animate-fade-in">
                 <div className="flex items-center gap-3">
@@ -678,7 +743,7 @@ function AuthenticatedDashboardLayout({
                 <div className="mb-4">
                   <p className="text-sm font-semibold text-text-primary">New Account</p>
                   <p className="text-xs text-text-muted mt-1">
-                    Create an isolated broker and Telegram configuration.
+                    Create an isolated MT5 trading account.
                   </p>
                 </div>
                 <Input

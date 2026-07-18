@@ -1,13 +1,17 @@
 """Trade history service using SQLite."""
 
-import aiosqlite
+import shutil
 from datetime import datetime
 from pathlib import Path
 
+import aiosqlite
+
+from ..runtime_data import DATA_DIR
 from ..schemas.account import TradeHistoryEntry
 
 # Database file path
-DB_PATH = Path(__file__).parent.parent.parent / "trade_history.db"
+LEGACY_DB_PATH = Path(__file__).parent.parent.parent / "trade_history.db"
+DB_PATH = DATA_DIR / "trade_history.db"
 
 # SQL schema
 CREATE_TABLE_SQL = """
@@ -26,8 +30,7 @@ CREATE TABLE IF NOT EXISTS trade_history (
     commission REAL DEFAULT 0,
     opened_at DATETIME NOT NULL,
     closed_at DATETIME NOT NULL,
-    source TEXT DEFAULT 'telegram',
-    telegram_msg_id INTEGER,
+    source TEXT DEFAULT 'mt5',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -39,6 +42,9 @@ CREATE INDEX IF NOT EXISTS idx_trade_history_ticket ON trade_history(ticket);
 
 async def init_database() -> None:
     """Initialize the database and create tables if needed."""
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    if not DB_PATH.exists() and LEGACY_DB_PATH.exists():
+        shutil.copy2(LEGACY_DB_PATH, DB_PATH)
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(CREATE_TABLE_SQL)
         await db.commit()
@@ -59,8 +65,7 @@ async def add_trade(
     tp: float | None = None,
     swap: float = 0.0,
     commission: float = 0.0,
-    source: str = "telegram",
-    telegram_msg_id: int | None = None,
+    source: str = "mt5",
 ) -> int:
     """Add a trade to history.
 
@@ -73,8 +78,8 @@ async def add_trade(
             INSERT INTO trade_history (
                 ticket, symbol, order_type, volume, price_open, price_close,
                 sl, tp, profit, swap, commission, opened_at, closed_at,
-                source, telegram_msg_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ticket,
@@ -91,7 +96,6 @@ async def add_trade(
                 opened_at.isoformat(),
                 closed_at.isoformat(),
                 source,
-                telegram_msg_id,
             ),
         )
         await db.commit()
@@ -175,7 +179,6 @@ async def get_trade_history(
                 opened_at=datetime.fromisoformat(row["opened_at"]),
                 closed_at=datetime.fromisoformat(row["closed_at"]),
                 source=row["source"],
-                telegram_msg_id=row["telegram_msg_id"],
             )
             for row in rows
         ]

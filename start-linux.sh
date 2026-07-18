@@ -86,7 +86,7 @@ wait_for_port() {
 # ============================================================================
 echo -e "${BOLD}${BLUE}"
 echo "  ╔══════════════════════════════════════════╗"
-echo "  ║     Tania Signal Copier — Linux Start    ║"
+echo "  ║       Signal Copier — Linux Start        ║"
 echo "  ╚══════════════════════════════════════════╝"
 echo -e "${NC}"
 

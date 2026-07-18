@@ -1,17 +1,6 @@
 """Orders router for placing and managing orders."""
 
-import sys
-
 from fastapi import APIRouter, Depends, HTTPException
-
-# Import from modules already loaded by main.py
-# These are loaded directly to avoid triggering the bot's __init__.py which requires telethon
-models_module = sys.modules.get("tania_signal_copier.models")
-if models_module is None:
-    raise ImportError("tania_signal_copier.models not loaded. Ensure main.py loads it first.")
-
-BotOrderType = models_module.OrderType
-TradeSignal = models_module.TradeSignal
 
 from ..dependencies import get_mt5_executor
 from ..schemas.order import (
@@ -22,17 +11,19 @@ from ..schemas.order import (
     PlaceOrderResponse,
 )
 from ..symbol_utils import to_broker_symbol
+from ..trading.models import OrderType as TradingOrderType
+from ..trading.models import TradeSignal
 
 router = APIRouter()
 
-# Map API order types to bot order types
+# Map API request types to neutral execution types.
 ORDER_TYPE_MAP = {
-    OrderType.BUY: BotOrderType.BUY,
-    OrderType.SELL: BotOrderType.SELL,
-    OrderType.BUY_LIMIT: BotOrderType.BUY_LIMIT,
-    OrderType.SELL_LIMIT: BotOrderType.SELL_LIMIT,
-    OrderType.BUY_STOP: BotOrderType.BUY_STOP,
-    OrderType.SELL_STOP: BotOrderType.SELL_STOP,
+    OrderType.BUY: TradingOrderType.BUY,
+    OrderType.SELL: TradingOrderType.SELL,
+    OrderType.BUY_LIMIT: TradingOrderType.BUY_LIMIT,
+    OrderType.SELL_LIMIT: TradingOrderType.SELL_LIMIT,
+    OrderType.BUY_STOP: TradingOrderType.BUY_STOP,
+    OrderType.SELL_STOP: TradingOrderType.SELL_STOP,
 }
 
 
@@ -50,8 +41,8 @@ async def place_order(
         PlaceOrderResponse: The result of placing the order.
     """
     # Convert to TradeSignal for executor
-    bot_order_type = ORDER_TYPE_MAP.get(request.order_type)
-    if not bot_order_type:
+    trading_order_type = ORDER_TYPE_MAP.get(request.order_type)
+    if not trading_order_type:
         raise HTTPException(status_code=400, detail=f"Invalid order type: {request.order_type}")
 
     # For pending orders, price is required
@@ -66,7 +57,7 @@ async def place_order(
 
     signal = TradeSignal(
         symbol=to_broker_symbol(request.symbol),
-        order_type=bot_order_type,
+        order_type=trading_order_type,
         entry_price=request.price,
         stop_loss=request.sl,
         take_profits=[request.tp] if request.tp else [],

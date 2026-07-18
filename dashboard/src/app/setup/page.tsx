@@ -28,9 +28,9 @@ import {
   connectMT5,
   createAccount,
   getMT5BrokerServers,
-  getBotConfig,
+  getAccountRuntimeConfig,
   getMe,
-  saveBotConfig,
+  saveAccountRuntimeConfig,
 } from "@/lib/api";
 import {
   CUSTOM_BROKER_SERVER_VALUE,
@@ -90,7 +90,7 @@ export default function SetupPage() {
     async function loadConfig() {
       setIsLoading(true);
       try {
-        const result = await getBotConfig();
+        const result = await getAccountRuntimeConfig();
         if (cancelled || !result.success) return;
         setConfig({
           MT5_LOGIN: result.config.MT5_LOGIN || "",
@@ -181,7 +181,7 @@ export default function SetupPage() {
         });
       }
 
-      const saved = await saveBotConfig(config);
+      const saved = await saveAccountRuntimeConfig(config);
       setConfiguredSecrets(saved.configuredSecrets || []);
 
       setMessage("Testing broker connection...");
@@ -217,7 +217,7 @@ export default function SetupPage() {
         <PageHeader
           meta="Account setup"
           title="Connect your broker"
-          description="Complete this once for each trading account. The Telegram signal source is managed by the platform."
+          description="Complete this once for each MT5 account you want to use for copying or sharing trades."
         />
       </AnimatedSection>
 
@@ -269,7 +269,7 @@ export default function SetupPage() {
                   <Select
                     label="Broker"
                     value={selectedBrokerServer}
-                    onChange={(event) => updateBrokerServer(event.target.value)}
+                    onValueChange={updateBrokerServer}
                     options={brokerServerOptions}
                     placeholder="Select broker server"
                     disabled={isSubmitting}
@@ -325,7 +325,6 @@ export default function SetupPage() {
             <PanelHeader eyebrow="Checklist" title="Before continuing" />
             <PanelBody>
               <div className="space-y-3 text-sm text-text-secondary">
-                <ChecklistItem done label="Telegram signal source managed by platform" />
                 <ChecklistItem done={Boolean(config.MT5_LOGIN.trim())} label="Broker login entered" />
                 <ChecklistItem
                   done={Boolean(config.MT5_PASSWORD.trim()) || configuredSecrets.includes("MT5_PASSWORD")}

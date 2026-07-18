@@ -267,7 +267,10 @@ def resolve_better_auth_member(user_id: str, email: str) -> dict[str, Any]:
     clean_id = user_id.strip()
     clean_email = _clean_email(email)
     if not clean_id or not clean_email:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Authentication required")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
 
     store = _load_store()
     member = store.get("members", {}).get(clean_id)

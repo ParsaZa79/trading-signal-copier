@@ -1,4 +1,4 @@
-"""Bot configuration and presets router."""
+"""Account-scoped MT5 runtime configuration."""
 
 import json
 from datetime import datetime
@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from ..account_store import (
+    OBSOLETE_SIGNAL_KEYS,
     decode_config,
     encode_config,
     get_active_account,
@@ -16,7 +17,6 @@ from ..account_store import (
     save_account_config,
 )
 from ..runtime_data import ENV_PATH, account_last_preset_path, account_presets_dir
-from ..shared_telegram import strip_account_telegram_values
 
 router = APIRouter()
 CurrentAccount = Annotated[dict[str, Any], Depends(get_active_account)]
@@ -129,7 +129,7 @@ class SavePresetRequest(BaseModel):
 @router.get("")
 @router.get("/")
 async def get_config(account: CurrentAccount):
-    """Get current bot configuration.
+    """Get current account runtime configuration.
 
     Uses cached runtime values.
     If no cache exists yet, it imports values from legacy .env once.
@@ -151,7 +151,7 @@ async def get_config(account: CurrentAccount):
 @router.put("")
 @router.put("/")
 async def save_config(request: SaveConfigRequest, account: CurrentAccount):
-    """Save bot configuration.
+    """Save account runtime configuration.
 
     Always saves to cache. Optionally writes to .env file.
     """
@@ -162,7 +162,7 @@ async def save_config(request: SaveConfigRequest, account: CurrentAccount):
         saved = save_account_config(account["id"], request.config)
 
         # Shared .env writes are intentionally disabled under multi-account mode.
-        # The bot receives account-scoped env vars when it starts.
+        # Account runtimes receive account-scoped values when they start.
         _ = request.write_env
 
         _, configured_secrets = sanitize_config(saved)
@@ -238,7 +238,11 @@ async def get_preset(name: str, account: CurrentAccount):
         data = json.loads(preset_path.read_text(encoding="utf-8"))
         values_payload = data.get("values", {})
         values = (
-            strip_account_telegram_values(decode_config(values_payload, reveal_secrets=True))
+            {
+                key: value
+                for key, value in decode_config(values_payload, reveal_secrets=True).items()
+                if key not in OBSOLETE_SIGNAL_KEYS
+            }
             if isinstance(values_payload, dict)
             else {}
         )
@@ -293,13 +297,22 @@ async def save_preset(request: SavePresetRequest, account: CurrentAccount):
 
         existing_values_payload = existing.get("values", {}) if isinstance(existing, dict) else {}
         existing_values = (
-            strip_account_telegram_values(
-                decode_config(existing_values_payload, reveal_secrets=True)
-            )
+            {
+                key: value
+                for key, value in decode_config(
+                    existing_values_payload,
+                    reveal_secrets=True,
+                ).items()
+                if key not in OBSOLETE_SIGNAL_KEYS
+            }
             if isinstance(existing_values_payload, dict)
             else {}
         )
-        preset_values = strip_account_telegram_values(request.values or {})
+        preset_values = {
+            key: value
+            for key, value in (request.values or {}).items()
+            if key not in OBSOLETE_SIGNAL_KEYS
+        }
 
         data = {
             "name": request.name,
