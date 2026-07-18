@@ -8,6 +8,7 @@ import {
 } from "@/lib/symbol-icon-resolver";
 import FinancialFlagIcon from "financial-flag-icons";
 import { DynamicFlag } from "@sankyu/react-circle-flags";
+import Image from "next/image";
 import {
   BarChart3,
   Bitcoin,
@@ -163,9 +164,12 @@ export function SymbolIcon({ symbol, size = "md", className }: SymbolIconProps) 
   if (resolved.kind === "tradingview" && resolved.tradingViewPath) {
     return (
       <div className={containerClass} title={symbol}>
-        <img
+        <Image
           src={`${TRADING_VIEW_LOGO_BASE}/${resolved.tradingViewPath}.svg`}
           alt={symbol}
+          width={dimensions.px}
+          height={dimensions.px}
+          unoptimized
           className="h-[70%] w-[70%] object-contain"
           onError={() => setImageFailed(true)}
         />

@@ -16,13 +16,12 @@ import type {
   PendingOrder,
   TradeHistoryEntry,
   MT5ConnectResponse,
-  PlatformOverview,
-  PlatformProvider,
-  PlatformRiskPolicy,
-  PlatformSubscription,
-  PlatformTradeEvent,
-  PlatformExecution,
-  PlatformStressResult,
+  CopyOverview,
+  CopyRiskPolicy,
+  CopyRiskPreset,
+  CopySubscription,
+  CopyTrader,
+  CopyTradingMode,
 } from "@/types";
 
 function toBrokerSymbol(symbol: string): string {
@@ -188,7 +187,6 @@ export interface AccountSetupStatus {
   account: DashboardAccount;
   setup_complete: boolean;
   broker_configured: boolean;
-  telegram_configured: boolean;
   missing_fields: string[];
 }
 
@@ -404,12 +402,8 @@ export async function getSymbolPrice(
   return fetchApi(`/api/symbols/${toBrokerSymbol(symbol)}/price`);
 }
 
-// ============================================================
-// Bot Management APIs (FastAPI backend)
-// ============================================================
-
-// Bot Config
-export async function getBotConfig(): Promise<{
+// Account-scoped MT5 runtime configuration
+export async function getAccountRuntimeConfig(): Promise<{
   success: boolean;
   account_id: string;
   config: Record<string, string>;
@@ -419,7 +413,7 @@ export async function getBotConfig(): Promise<{
   return fetchApi("/api/config");
 }
 
-export async function saveBotConfig(
+export async function saveAccountRuntimeConfig(
   config: Record<string, string>,
   writeEnv = false
 ): Promise<{ success: boolean; configuredSecrets?: string[] }> {
@@ -429,288 +423,108 @@ export async function saveBotConfig(
   });
 }
 
-// Presets
-export async function getPresets(): Promise<{
-  success: boolean;
-  presets: Array<{ name: string; created_at: string; modified_at: string }>;
-  lastPreset: string | null;
-}> {
-  return fetchApi("/api/config/presets");
+// Beginner-first copy-trading marketplace
+export async function getCopyDirectory(input?: {
+  search?: string;
+  market?: string;
+}): Promise<{ success: boolean; traders: CopyTrader[]; ranking: "neutral" }> {
+  const query = new URLSearchParams();
+  if (input?.search) query.set("search", input.search);
+  if (input?.market) query.set("market", input.market);
+  const suffix = query.size ? `?${query.toString()}` : "";
+  return fetchApi(`/api/copy/directory${suffix}`);
 }
 
-export async function getPreset(name: string): Promise<{
-  success: boolean;
-  preset: {
-    name: string;
-    created_at: string;
-    modified_at: string;
-    values: Record<string, string>;
-    configuredSecrets: string[];
-  };
-}> {
-  return fetchApi(`/api/config/presets/${encodeURIComponent(name)}`);
+export async function getCopyOverview(): Promise<CopyOverview> {
+  return fetchApi("/api/copy/overview");
 }
 
-export async function savePreset(
-  name: string,
-  values: Record<string, string>
-): Promise<{ success: boolean }> {
-  return fetchApi("/api/config/presets", {
-    method: "POST",
-    body: JSON.stringify({ name, values }),
-  });
-}
-
-export async function deletePreset(name: string): Promise<{ success: boolean }> {
-  return fetchApi(`/api/config/presets/${encodeURIComponent(name)}`, {
-    method: "DELETE",
-  });
-}
-
-// Bot Control
-export async function getBotStatus(): Promise<{
-  success: boolean;
-  status: "stopped" | "starting" | "running" | "stopping" | "error";
-  pid?: number;
-  started_at?: string;
-  error?: string;
-}> {
-  return fetchApi("/api/bot/status");
-}
-
-export async function startBot(options?: {
-  preventSleep?: boolean;
-  writeEnv?: boolean;
-  config?: Record<string, string>;
-}): Promise<{
-  success: boolean;
-  status?: string;
-  pid?: number;
-  error?: string;
-}> {
-  return fetchApi("/api/bot/start", {
-    method: "POST",
-    body: JSON.stringify({
-      prevent_sleep: options?.preventSleep ?? false,
-      write_env: options?.writeEnv ?? false,
-      config: options?.config,
-    }),
-  });
-}
-
-export async function stopBot(): Promise<{
-  success: boolean;
-  status?: string;
-  error?: string;
-}> {
-  return fetchApi("/api/bot/stop", {
-    method: "POST",
-  });
-}
-
-// Bot Tracked Positions
-export async function getTrackedPositions(): Promise<{
-  success: boolean;
-  positions: Array<{
-    msg_id: number;
-    mt5_ticket: number;
-    symbol: string;
-    role: string;
-    order_type: string;
-    entry_price: number | null;
-    stop_loss: number | null;
-    lot_size: number | null;
-    status: string;
-    opened_at: string;
-  }>;
-  total: number;
-  open: number;
-  closed: number;
-}> {
-  return fetchApi("/api/bot/positions");
-}
-
-export async function clearTrackedPositions(): Promise<{ success: boolean }> {
-  return fetchApi("/api/bot/positions", { method: "DELETE" });
-}
-
-// Analysis
-export async function getAnalysisSummary(): Promise<{
-  success: boolean;
-  summary: {
-    total_signals: number;
-    tp2_hit: number;
-    tp1_hit: number;
-    sl_hit: number;
-    tp_unnumbered: number;
-    win_rate: number;
-    tp1_to_tp2_conversion: number;
-    date_range: { start: string; end: string } | null;
-    avg_time_to_tp1_minutes?: number;
-    avg_time_to_tp2_minutes?: number;
-  };
-}> {
-  return fetchApi("/api/analysis/summary");
-}
-
-export async function runAnalysis(
-  action: "fetch" | "report",
-  options?: { total?: number; batch?: number; delay?: number }
-): Promise<{
-  success: boolean;
-  output?: string;
-  error?: string;
-}> {
-  return fetchApi("/api/analysis/run", {
-    method: "POST",
-    body: JSON.stringify({ action, ...options }),
-  });
-}
-
-// Telegram Channels
-export interface TelegramChannel {
-  id: string;
-  name: string;
-  username?: string;
-  type: "channel" | "group";
-}
-
-export async function getTelegramChannels(
-  apiId: string,
-  apiHash: string
-): Promise<{ channels: TelegramChannel[] }> {
-  return fetchApi(`/api/telegram/channels?api_id=${apiId}&api_hash=${apiHash}`);
-}
-
-// System Prompts
-export async function getSystemPrompts(): Promise<{
-  success: boolean;
-  system_prompt: string;
-  correction_system_prompt: string;
-  default_system_prompt: string;
-  default_correction_system_prompt: string;
-  is_custom_system_prompt: boolean;
-  is_custom_correction_prompt: boolean;
-}> {
-  return fetchApi("/api/prompts");
-}
-
-export async function saveSystemPrompts(prompts: {
-  system_prompt?: string;
-  correction_system_prompt?: string;
-}): Promise<{ success: boolean }> {
-  return fetchApi("/api/prompts", {
-    method: "PUT",
-    body: JSON.stringify(prompts),
-  });
-}
-
-export async function resetSystemPrompts(): Promise<{ success: boolean }> {
-  return fetchApi("/api/prompts", {
-    method: "DELETE",
-  });
-}
-
-// Platform / copy-trading
-export async function getPlatformOverview(): Promise<PlatformOverview> {
-  return fetchApi("/api/platform/overview");
-}
-
-export async function getPlatformProviders(): Promise<{
-  success: boolean;
-  providers: PlatformProvider[];
-}> {
-  return fetchApi("/api/platform/providers");
-}
-
-export async function createPlatformProvider(input: {
-  name: string;
-  source_type: string;
-  description?: string;
-  visibility?: "public" | "private";
-}): Promise<{ success: boolean; provider: PlatformProvider }> {
-  return fetchApi("/api/platform/providers", {
+export async function saveCopyTrader(input: {
+  account_id: string;
+  display_name: string;
+  description: string;
+  is_copyable: boolean;
+}): Promise<{ success: boolean; trader: CopyTrader }> {
+  return fetchApi("/api/copy/traders", {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
-export async function getPlatformRiskPolicy(): Promise<{
-  success: boolean;
-  risk_policy: PlatformRiskPolicy;
-}> {
-  return fetchApi("/api/platform/risk-policy");
+export async function updateCopyTrader(
+  traderId: string,
+  input: Partial<Pick<CopyTrader, "display_name" | "description" | "is_copyable">>
+): Promise<{ success: boolean; trader: CopyTrader }> {
+  return fetchApi(`/api/copy/traders/${encodeURIComponent(traderId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
 }
 
-export async function savePlatformRiskPolicy(input: Partial<PlatformRiskPolicy>): Promise<{
-  success: boolean;
-  risk_policy: PlatformRiskPolicy;
-}> {
-  return fetchApi("/api/platform/risk-policy", {
+export async function getCopyRiskPolicy(
+  accountId: string
+): Promise<{ success: boolean; risk_policy: CopyRiskPolicy }> {
+  return fetchApi(`/api/copy/accounts/${encodeURIComponent(accountId)}/risk-policy`);
+}
+
+export async function saveCopyRiskPolicy(
+  accountId: string,
+  input: {
+    preset: CopyRiskPreset;
+    risk_per_trade_pct?: number;
+    daily_loss_limit_pct?: number;
+    total_open_risk_pct?: number;
+    max_open_trades?: number;
+    require_stop_loss?: boolean;
+    allowed_symbols?: string[];
+  }
+): Promise<{ success: boolean; risk_policy: CopyRiskPolicy }> {
+  return fetchApi(`/api/copy/accounts/${encodeURIComponent(accountId)}/risk-policy`, {
     method: "PUT",
     body: JSON.stringify(input),
   });
 }
 
-export async function getPlatformSubscriptions(): Promise<{
-  success: boolean;
-  subscriptions: PlatformSubscription[];
-}> {
-  return fetchApi("/api/platform/subscriptions");
-}
-
-export async function createPlatformSubscription(input: {
-  provider_id: string;
-  copy_mode: "fixed_lot" | "multiplier" | "mirror";
-  fixed_lot?: number;
-  multiplier?: number;
-  paper_trading?: boolean;
-}): Promise<{ success: boolean; subscription: PlatformSubscription }> {
-  return fetchApi("/api/platform/subscriptions", {
+export async function createCopySubscription(input: {
+  trader_id: string;
+  follower_account_id: string;
+  mode: CopyTradingMode;
+  risk_preset: CopyRiskPreset;
+  overlap_acknowledged: boolean;
+  country_code?: string;
+  disclosure_version?: string;
+}): Promise<{ success: boolean; subscription: CopySubscription }> {
+  return fetchApi("/api/copy/subscriptions", {
     method: "POST",
     body: JSON.stringify(input),
   });
 }
 
-export async function createPlatformTradeEvent(input: {
-  provider_id: string;
-  action: "open" | "modify" | "close" | "partial_close";
-  symbol: string;
-  side?: "buy" | "sell";
-  entry_price?: number;
-  stop_loss?: number;
-  take_profits?: number[];
-  volume?: number;
-  source?: string;
-}): Promise<{ success: boolean; event: PlatformTradeEvent }> {
-  return fetchApi("/api/platform/trade-events", {
-    method: "POST",
+export async function updateCopySubscription(
+  subscriptionId: string,
+  input: Partial<
+    Pick<CopySubscription, "status" | "risk_preset" | "overlap_acknowledged">
+  >
+): Promise<{ success: boolean; subscription: CopySubscription }> {
+  return fetchApi(`/api/copy/subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    method: "PATCH",
     body: JSON.stringify(input),
   });
 }
 
-export async function processPlatformTradeEvent(eventId: string): Promise<{
-  success: boolean;
-  result: { created: number; blocked: number; skipped: number; results: Array<Record<string, unknown>> };
-}> {
-  return fetchApi(`/api/platform/trade-events/${encodeURIComponent(eventId)}/process`, {
-    method: "POST",
-  });
-}
-
-export async function getPlatformExecutions(): Promise<{
-  success: boolean;
-  executions: PlatformExecution[];
-}> {
-  return fetchApi("/api/platform/executions");
-}
-
-export async function runPlatformStressTest(input: {
-  provider_id: string;
-  count: number;
-}): Promise<{ success: boolean; result: PlatformStressResult }> {
-  return fetchApi("/api/platform/stress-test", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+export async function activateLiveCopySubscription(
+  subscriptionId: string,
+  input: {
+    country_code: string;
+    disclosure_version: string;
+    checklist: Record<string, boolean>;
+  }
+): Promise<{ success: boolean; subscription: CopySubscription }> {
+  return fetchApi(
+    `/api/copy/subscriptions/${encodeURIComponent(subscriptionId)}/activate-live`,
+    {
+      method: "POST",
+      body: JSON.stringify(input),
+    }
+  );
 }

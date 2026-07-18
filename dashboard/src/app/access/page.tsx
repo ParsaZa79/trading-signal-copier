@@ -20,6 +20,7 @@ import {
 import { AnimatedSection, PageContainer } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { CLERK_ENABLED } from "@/lib/auth-mode";
 import { cn } from "@/lib/utils";
 
@@ -161,23 +162,13 @@ export default function AccessPage() {
                 placeholder="person@example.com"
                 disabled={!canManage || isInviting}
               />
-              <label className="block">
-                <span className="mb-2 block text-xs font-medium uppercase tracking-wider text-text-muted">
-                  Role
-                </span>
-                <select
-                  value={role}
-                  onChange={(event) => setRole(event.target.value as AccessMember["role"])}
-                  disabled={!canManage || isInviting}
-                  className="h-10 w-full rounded-xl border border-border-subtle bg-bg-tertiary px-3 text-sm text-text-primary outline-none focus:border-border-default"
-                >
-                  {ROLE_OPTIONS.map((item) => (
-                    <option key={item} value={item}>
-                      {roleLabel(item)}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <Select
+                label="Role"
+                value={role}
+                onValueChange={(nextRole) => setRole(nextRole as AccessMember["role"])}
+                disabled={!canManage || isInviting}
+                options={ROLE_OPTIONS.map((item) => ({ value: item, label: roleLabel(item) }))}
+              />
               <Button type="submit" variant="accent" disabled={!canManage || isInviting || !email.trim()}>
                 {isInviting ? <LoaderLabel label="Inviting" /> : <><MailPlus className="h-4 w-4" /> Invite</>}
               </Button>
@@ -227,20 +218,22 @@ export default function AccessPage() {
                           </div>
                         </td>
                         <td className="px-5 py-4">
-                          <select
+                          <Select
+                            aria-label={`Role for ${member.email}`}
                             value={member.role}
                             disabled={!canManage}
-                            onChange={(event) =>
-                              handleUpdate(member, { role: event.target.value as AccessMember["role"] })
+                            onValueChange={(nextRole) =>
+                              handleUpdate(member, { role: nextRole as AccessMember["role"] })
                             }
-                            className="h-8 rounded-lg border border-border-subtle bg-bg-tertiary px-2 text-xs text-text-primary outline-none"
-                          >
-                            {ROLE_OPTIONS.map((item) => (
-                              <option key={item} value={item}>
-                                {roleLabel(item)}
-                              </option>
-                            ))}
-                          </select>
+                            compact
+                            containerClassName="w-36"
+                            className="h-8 rounded-lg px-2 text-xs"
+                            menuClassName="min-w-36"
+                            options={ROLE_OPTIONS.map((item) => ({
+                              value: item,
+                              label: roleLabel(item),
+                            }))}
+                          />
                         </td>
                         <td className="px-5 py-4">
                           <StatusBadge status={member.status} />

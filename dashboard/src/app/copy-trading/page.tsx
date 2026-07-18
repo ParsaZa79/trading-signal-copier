@@ -1,7 +1,16 @@
-"use client";
-
-import PlatformPage from "../platform/page";
+import { Suspense } from "react";
+import { CopyTradingClient } from "./copy-trading-client";
 
 export default function CopyTradingPage() {
-  return <PlatformPage />;
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-[60vh] items-center justify-center text-sm text-text-muted">
+          Opening copy trading…
+        </div>
+      }
+    >
+      <CopyTradingClient />
+    </Suspense>
+  );
 }

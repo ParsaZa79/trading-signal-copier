@@ -1,11 +1,12 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { createContext, useContext, useState, type ReactNode } from "react";
+import { createContext, useContext, useId, useState, type KeyboardEvent, type ReactNode } from "react";
 
 interface TabsContextValue {
   value: string;
   setValue: (value: string) => void;
+  baseId: string;
 }
 
 const TabsContext = createContext<TabsContextValue | null>(null);
@@ -34,6 +35,7 @@ export function Tabs({
   className,
 }: TabsProps) {
   const [uncontrolledValue, setUncontrolledValue] = useState(defaultValue);
+  const baseId = useId();
 
   const value = controlledValue ?? uncontrolledValue;
   const setValue = (newValue: string) => {
@@ -42,7 +44,7 @@ export function Tabs({
   };
 
   return (
-    <TabsContext.Provider value={{ value, setValue }}>
+    <TabsContext.Provider value={{ value, setValue, baseId }}>
       <div className={cn("w-full", className)}>{children}</div>
     </TabsContext.Provider>
   );
@@ -54,8 +56,27 @@ interface TabsListProps {
 }
 
 export function TabsList({ children, className }: TabsListProps) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    const tabs = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]:not(:disabled)')
+    );
+    if (!tabs.length) return;
+    const current = tabs.indexOf(document.activeElement as HTMLButtonElement);
+    let next = current;
+    if (event.key === "Home") next = 0;
+    if (event.key === "End") next = tabs.length - 1;
+    if (event.key === "ArrowRight") next = (Math.max(current, 0) + 1) % tabs.length;
+    if (event.key === "ArrowLeft") next = (current <= 0 ? tabs.length : current) - 1;
+    event.preventDefault();
+    tabs[next]?.focus();
+    tabs[next]?.click();
+  };
+
   return (
     <div
+      role="tablist"
+      onKeyDown={handleKeyDown}
       className={cn(
         "inline-flex items-center gap-1 p-1 rounded-xl bg-bg-tertiary/50 border border-border-subtle",
         className
@@ -73,14 +94,17 @@ interface TabsTriggerProps {
 }
 
 export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
-  const { value: selectedValue, setValue } = useTabs();
+  const { value: selectedValue, setValue, baseId } = useTabs();
   const isSelected = selectedValue === value;
 
   return (
     <button
       type="button"
       role="tab"
+      id={`${baseId}-tab-${value}`}
+      aria-controls={`${baseId}-panel-${value}`}
       aria-selected={isSelected}
+      tabIndex={isSelected ? 0 : -1}
       onClick={() => setValue(value)}
       className={cn(
         "px-4 py-2 text-sm font-medium rounded-lg transition-all duration-200",
@@ -102,14 +126,20 @@ interface TabsContentProps {
 }
 
 export function TabsContent({ value, children, className }: TabsContentProps) {
-  const { value: selectedValue } = useTabs();
+  const { value: selectedValue, baseId } = useTabs();
 
   if (selectedValue !== value) {
     return null;
   }
 
   return (
-    <div className={cn("animate-fade-in", className)} role="tabpanel">
+    <div
+      className={cn("animate-fade-in", className)}
+      role="tabpanel"
+      id={`${baseId}-panel-${value}`}
+      aria-labelledby={`${baseId}-tab-${value}`}
+      tabIndex={0}
+    >
       {children}
     </div>
   );

@@ -69,7 +69,6 @@ export interface TradeHistoryEntry {
   opened_at: string;
   closed_at: string;
   source: string;
-  telegram_msg_id: number | null;
 }
 
 // WebSocket message types
@@ -109,189 +108,103 @@ export interface MT5ConnectResponse {
   error?: string | null;
 }
 
-// Bot Configuration types
-export interface BotConfig {
-  // MT5 settings
-  MT5_LOGIN: string;
-  MT5_PASSWORD: string;
-  MT5_SERVER: string;
-  MT5_PATH?: string; // Windows only
-  MT5_DOCKER_HOST?: string; // macOS/Linux
-  MT5_DOCKER_PORT?: string; // macOS/Linux
-  // Trading settings
-  DEFAULT_LOT_SIZE: string;
-  MAX_RISK_PERCENT: string;
-  SCALP_LOT_SIZE: string;
-  RUNNER_LOT_SIZE: string;
-  TRADING_STRATEGY: "dual_tp" | "single";
-  EDIT_WINDOW_SECONDS: string;
-  // Optional
-  TEST_SYMBOL?: string;
+// Beginner-first copy-trading marketplace
+export type CopyTradeAction = "open" | "modify" | "reduce" | "close";
+export type CopyRiskPreset = "conservative" | "balanced" | "custom";
+export type CopyTradingMode = "paper" | "live";
+export type CopySubscriptionStatus = "draft" | "active" | "paused" | "stopping" | "stopped";
+
+export interface CopyTraderStatistics {
+  return_90d_pct: number | null;
+  max_drawdown_pct: number | null;
+  track_record_days: number;
+  trade_count: number;
+  follower_count: number;
+  data_source: "connected_mt5";
 }
 
-export interface Preset {
-  name: string;
-  created_at: string;
-  modified_at: string;
-  values: Partial<BotConfig>;
-}
-
-export interface TelegramChannel {
+export interface CopyTrader {
   id: string;
-  name: string;
-  username?: string;
-  type: "channel" | "group";
-}
-
-export type BotStatus = "stopped" | "starting" | "running" | "stopping" | "error";
-
-export interface BotState {
-  status: BotStatus;
-  pid?: number;
-  started_at?: string;
-  error?: string;
-}
-
-export interface LogEntry {
-  id: string;
-  timestamp: string;
-  level: "info" | "warning" | "error" | "bot" | "analysis";
-  message: string;
-}
-
-export interface AnalysisSummary {
-  total_signals: number;
-  tp2_hit: number;
-  tp1_hit: number;
-  sl_hit: number;
-  tp_unnumbered: number;
-  win_rate: number;
-  tp1_to_tp2_conversion: number;
-  date_range: {
-    start: string;
-    end: string;
-  } | null;
-  avg_time_to_tp1_minutes?: number;
-  avg_time_to_tp2_minutes?: number;
-}
-
-export interface TrackedPosition {
-  msg_id: number;
-  mt5_ticket: number;
-  symbol: string;
-  role: "scalp" | "runner" | "single";
-  order_type: string;
-  entry_price: number | null;
-  stop_loss: number | null;
-  lot_size: number | null;
-  status: "open" | "closed" | "pending_completion";
-  opened_at: string;
-}
-
-// Platform / copy-trading types
-export type PlatformSourceType = "manual" | "telegram" | "webhook" | "mt5_mirror" | string;
-export type PlatformCopyMode = "fixed_lot" | "multiplier" | "mirror";
-export type PlatformTradeAction = "open" | "modify" | "close" | "partial_close";
-export type PlatformTradeSide = "buy" | "sell";
-
-export interface PlatformProvider {
-  id: string;
+  account_id: string;
   owner_user_id: string;
-  name: string;
-  source_type: PlatformSourceType;
+  display_name: string;
   description: string;
-  visibility: "public" | "private";
-  status: string;
+  is_copyable: boolean;
+  markets: string[];
+  statistics: CopyTraderStatistics;
+  stats_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface PlatformRiskPolicy {
-  user_id: string;
-  paper_trading: boolean;
+export interface CopyAccount {
+  id: string;
+  legacy_id: string;
+  name: string;
+  status: "pending_setup" | "active" | "disabled";
+  setup_complete: boolean;
+}
+
+export interface CopyRiskPolicy {
+  id: string;
+  account_id: string;
+  preset: CopyRiskPreset;
+  risk_per_trade_pct: number;
+  daily_loss_limit_pct: number;
+  total_open_risk_pct: number;
+  max_open_trades: number;
   require_stop_loss: boolean;
   allowed_symbols: string[];
-  max_daily_loss: number | null;
-  max_open_trades: number;
-  default_fixed_lot: number;
-  created_at?: string;
-  updated_at?: string;
+  updated_at: string;
 }
 
-export interface PlatformSubscription {
+export interface CopySubscription {
   id: string;
-  provider_id: string;
-  provider_name?: string;
+  trader_id: string;
+  trader_name: string | null;
+  trader_markets: string[];
+  follower_account_id: string;
   follower_user_id: string;
-  copy_mode: PlatformCopyMode;
-  fixed_lot: number;
-  multiplier: number;
-  paper_trading: boolean;
-  status: string;
+  mode: CopyTradingMode;
+  status: CopySubscriptionStatus;
+  risk_preset: CopyRiskPreset;
+  overlap_acknowledged: boolean;
+  country_code: string | null;
+  disclosure_version: string | null;
+  live_activated_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export interface PlatformTradeEvent {
-  id: string;
-  provider_id: string;
-  provider_name?: string;
-  owner_user_id: string;
-  action: PlatformTradeAction;
-  symbol: string;
-  side: PlatformTradeSide | null;
-  entry_price: number | null;
-  stop_loss: number | null;
-  take_profits: number[];
-  volume: number | null;
-  source: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
+export interface CopyRuntimeSummary {
+  account_id: string;
+  status: "offline" | "starting" | "healthy" | "degraded";
+  broker_server?: string | null;
+  trading_enabled?: boolean;
+  last_heartbeat_at?: string | null;
 }
 
-export interface PlatformExecution {
-  id: string;
-  event_id: string;
-  subscription_id: string;
-  provider_id: string;
-  provider_name?: string;
-  follower_user_id: string;
-  action: PlatformTradeAction;
-  symbol: string;
-  side: PlatformTradeSide | null;
-  entry_price: number | null;
-  stop_loss: number | null;
-  take_profits: number[];
-  volume: number;
-  mode: "paper" | "live_pending";
-  status: "accepted" | "blocked";
-  blocked_reason: string | null;
-  realized_pnl: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface PlatformOverview {
-  providers: PlatformProvider[];
-  subscriptions: PlatformSubscription[];
-  risk_policy: PlatformRiskPolicy;
-  recent_events: PlatformTradeEvent[];
-  recent_executions: PlatformExecution[];
-  metrics: {
-    provider_count: number;
-    available_provider_count: number;
-    subscription_count: number;
-    paper_execution_count: number;
-    blocked_execution_count: number;
+export interface CopyOverview {
+  success: boolean;
+  accounts: CopyAccount[];
+  owned_traders: CopyTrader[];
+  subscriptions: CopySubscription[];
+  recent_executions: Array<{
+    id: string;
+    trader_name: string;
+    symbol: string;
+    action: CopyTradeAction;
+    mode: CopyTradingMode;
+    status: string;
+    desired_volume: number | null;
+    actual_volume: number | null;
+    blocked_reason: string | null;
+    target_ticket: string | null;
+    created_at: string;
+  }>;
+  runtimes: CopyRuntimeSummary[];
+  live: {
+    feature_enabled: boolean;
+    requires_country_eligibility: boolean;
   };
-}
-
-export interface PlatformStressResult {
-  events: number;
-  event_ids: string[];
-  executions_created: number;
-  blocked: number;
-  skipped: number;
-  duration_ms: number;
 }
