@@ -1,28 +1,20 @@
 # =============================================================================
-# Multi-stage Dockerfile for Tania Signal Copier
+# Multi-stage Dockerfile for Signal Copier
 # =============================================================================
 # Usage with Dokploy "Docker Build Stage":
 #   - API service:       target stage "api"
 #   - Dashboard service: target stage "dashboard"
 #
-# Docker context must be the repo root (.) so both api/ and bot/ are available.
+# Docker context must be the repo root (.).
 # =============================================================================
 
 
 # --------------- API Stage ---------------
-FROM python:3.13-slim AS api
+FROM python:3.13.14-slim-bookworm AS api
 
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.6.14 /uv /usr/local/bin/uv
 
 WORKDIR /app
-
-# Copy bot source and install bot dependencies
-COPY bot/pyproject.toml bot/uv.lock bot/README.md ./bot/
-COPY bot/src/ ./bot/src/
-COPY bot/scripts/ ./bot/scripts/
-RUN mkdir -p ./bot/analysis
-WORKDIR /app/bot
-RUN uv sync --frozen --no-dev
 
 # Copy API source and install dependencies
 COPY api/pyproject.toml api/uv.lock /app/api/
@@ -38,11 +30,14 @@ VOLUME ["/app/data"]
 
 EXPOSE 8000
 
-CMD ["uv", "run", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready', timeout=3)"
+
+CMD ["sh", "-c", "if [ -n \"$DATABASE_URL\" ] && printf '%s' \"$DATABASE_URL\" | grep -q '^postgresql'; then uv run --no-sync alembic upgrade head; fi; exec uv run --no-sync uvicorn src.main:app --host 0.0.0.0 --port 8000"]
 
 
 # --------------- Dashboard Stage ---------------
-FROM oven/bun:1 AS dashboard
+FROM oven/bun:1.3.4 AS dashboard
 
 WORKDIR /app
 COPY dashboard/package.json dashboard/bun.lock ./

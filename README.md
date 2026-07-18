@@ -1,121 +1,71 @@
-# Tania Signal Copier
+# Signal Copier
 
-Multi-service workspace for Telegram signal parsing, MetaTrader 5 execution, and a web dashboard.
+Beginner-first MT5 copy trading with a Next.js dashboard and FastAPI execution API.
 
-## Repository Layout
+## What is included
 
-- `bot/` — Telegram signal copier (Python, `uv`), MT5 execution, GUI, and analysis scripts.
-- `api/` — FastAPI backend for dashboard + bot control endpoints and WebSocket streams.
-- `dashboard/` — Next.js dashboard UI for account, positions, orders, bot control, and analysis.
-- `silicon-metatrader5/` — MT5 Docker setup for Apple Silicon hosts.
+- `dashboard/` — trader discovery, guided paper/live setup, risk explanations, account setup, and portfolio monitoring.
+- `api/` — account-scoped copy APIs, PostgreSQL models, durable outbox worker, audit history, and neutral MT5 order primitives.
+- `mt5/` and `silicon-metatrader5/` — local MT5 bridge images for Linux and Apple Silicon development.
 
-## Quick Start
+Telegram ingestion and the former bot runtime have been retired. Production copy sources are connected MT5 accounts only.
 
-### Linux (one command)
+## Local development
 
-```bash
-./start-linux.sh
-```
-
-This starts MT5 Docker, the API, and the dashboard together. See [Linux Setup](#linux-setup) below for prerequisites.
-
-### macOS
-
-Run services in this order:
-
-#### 1) Start MT5 Docker
-
-```bash
-cd silicon-metatrader5/docker
-docker compose up --build
-```
-
-#### 2) Start API
+Run PostgreSQL and one MT5 bridge, then start the services:
 
 ```bash
 cd api
-cp .env.example .env  # first time only
+cp .env.example .env
 uv sync
+uv run alembic upgrade head
 uv run uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-#### 3) Start Dashboard
+```bash
+cd dashboard
+bun install --frozen-lockfile
+bun run dev
+```
+
+Open `http://localhost:3000/copy-trading` and API docs at `http://localhost:8000/docs`.
+
+For a frontend-only marketplace preview with realistic data:
 
 ```bash
 cd dashboard
-npm install
-npm run dev
+NEXT_PUBLIC_COPY_TRADING_PREVIEW=true bun run dev
 ```
 
-#### 4) Run Bot (optional, if not started via dashboard)
+Then open `http://localhost:3000/copy-trading?preview=1`.
+
+## Live-copying safety
+
+Live copying fails closed. `PAPER_LIVE_ENABLED` is `false` by default and the country eligibility table starts empty. Enabling live access also requires a healthy isolated account runtime, an approved country and disclosure version, account membership, the safety checklist, and any market-overlap acknowledgement.
+
+The public API never receives Docker access or raw MT5 credentials. Live orders are sent through `COPY_RUNTIME_MANAGER_URL` to one isolated runtime per connected account. That control-plane service is deployed separately and is intentionally not part of this paper-first release; keep live copying disabled until it has been provisioned and verified.
+
+## Production requirements
+
+- PostgreSQL reachable through `DATABASE_URL`; the API image runs Alembic before startup.
+- A persistent `/app/data` mount for encrypted account configuration, legacy archive input, and compatibility history.
+- `PAPER_LIVE_ENABLED=false` until the runtime manager and an approved jurisdiction policy are both present.
+- Public liveness at `/api/health/` and deployment readiness at `/api/health/ready`.
+
+## Verification
 
 ```bash
-cd bot
-cp .env.example .env  # first time only
-uv sync --dev
-./run_bot.sh
+cd api
+TEST_DATABASE_URL=postgresql+asyncpg://... uv run pytest
+uv run ruff check .
+uv run pyright
 ```
-
-## Linux Setup
-
-### Prerequisites
-
-- Docker (with compose plugin)
-- Python 3.12+ and `uv` package manager
-- Node.js 20+ (with npm or bun)
-
-### MT5 Docker Container
-
-Linux uses the pinned, hardened image in [`mt5/Dockerfile`](mt5/Dockerfile). It runs MT5 inside Wine with a VNC web interface and upgrades the Wine-side RPyC server to the audited client-compatible version.
 
 ```bash
-export MT5_VNC_PASSWORD='choose-a-local-password'
-docker compose -f mt5/compose.local.yaml up -d --build
+cd dashboard
+bun run lint
+TEST_DATABASE_URL=postgresql://... bun run test
+bun run build
 ```
 
-After the container starts:
-1. Open `http://localhost:3000` in your browser (VNC web interface)
-2. MT5 will auto-install on first run — wait for it to finish
-3. Log in to your broker account through the MT5 terminal in VNC
-
-**Important ports:**
-- `3000` — loopback-only VNC web interface (for MT5 GUI access)
-- `8001` — RPyC Classic; loopback-only locally and private-container-network-only in production. Never publish it publicly.
-
-### How MT5 Connection Works on Each Platform
-
-| Platform | Docker Image | Client Library | Connection |
-|----------|-------------|---------------|------------|
-| **Linux** | `gmag11/metatrader5_vnc` | `rpyc` (direct RPyC classic protocol) | `localhost:8001` |
-| **macOS** | `silicon-metatrader5` | `siliconmetatrader5` | `localhost:8001` |
-| **Windows** | None (native) | `MetaTrader5` | Direct IPC |
-
-The `mt5_adapter.py` module auto-detects the platform and uses the correct adapter.
-
-## Service URLs
-
-- Dashboard: `http://localhost:3000` (note: shares port with MT5 VNC on Linux — dashboard uses `3001` when started via `start-linux.sh`)
-- API docs: `http://localhost:8000/docs`
-- API health: `http://localhost:8000/api/health`
-- WebSocket: `ws://localhost:8000/ws`
-- MT5 VNC (Linux): `http://localhost:3000`
-
-## Environment Files
-
-- `bot/.env` controls Telegram, MT5, strategy, and LLM settings for the copier.
-- `api/.env` controls API host/port/CORS and MT5 connection used by backend routes.
-- `dashboard/.env.local` can override frontend API endpoints (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_WS_URL`).
-- In deployments, runtime bot config/presets/state are stored in `BOT_DATA_DIR` (defaults to `/app/data`).
-  Mount this path as a persistent volume in Dokploy to keep data across redeploys.
-
-## Development Notes
-
-- This repo is a monorepo-like workspace; each app has its own dependencies and lockfile.
-- Install/run commands should be executed inside each app directory (`bot`, `api`, `dashboard`).
-- `bot/.env.example` and `api/.env.example` should contain non-production placeholders only.
-
-## More Detailed Docs
-
-- Bot setup and workflows: `bot/README.md`
-- API setup and endpoints: `api/README.md`
-- Dashboard setup and integration: `dashboard/README.md`
+See `api/README.md` and `dashboard/README.md` for service-specific configuration.
