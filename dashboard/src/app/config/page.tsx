@@ -1,5 +1,5 @@
-import { redirect } from "next/navigation";
+import { AccountSetupContent } from "../setup/page";
 
-export default function AccountSetupRedirect() {
-  redirect("/setup");
+export default function AccountSetupPage() {
+  return <AccountSetupContent editMode />;
 }
