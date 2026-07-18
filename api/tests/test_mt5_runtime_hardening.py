@@ -9,6 +9,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MT5 = REPO_ROOT / "mt5"
 IMAGE = "trading-platform/mt5-rpyc:6.0.2"
 NETWORK = "trading-mt5-api"
+EGRESS_NETWORK = "trading-mt5-egress"
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -75,10 +76,13 @@ def test_effective_production_network_is_dedicated_and_rpyc_is_not_published() -
 
     assert service["image"] == IMAGE
     assert "build" not in service
-    assert set(service["networks"]) == {NETWORK}
+    assert set(service["networks"]) == {NETWORK, EGRESS_NETWORK}
     assert all(port["target"] != 8001 for port in service.get("ports", []))
     assert config["networks"][NETWORK]["name"] == NETWORK
     assert config["networks"][NETWORK]["external"] is True
+    assert config["networks"][EGRESS_NETWORK]["name"] == EGRESS_NETWORK
+    assert config["networks"][EGRESS_NETWORK]["external"] is True
+    assert config["volumes"]["mt5-config"]["external"] is True
     assert "dokploy-network" not in json.dumps(config)
 
 
@@ -90,7 +94,18 @@ def test_network_provisioner_requires_internal_attachable_network() -> None:
     assert "--internal" in source
     assert "--attachable" in source
     assert NETWORK in source
+    assert EGRESS_NETWORK in source
+    assert "--driver bridge" in source
+    assert "docker volume create" in source
     assert "docker network inspect" in source
+
+
+def test_production_rollback_is_compose_aware_and_executable() -> None:
+    readme = (MT5 / "README.md").read_text(encoding="utf-8")
+    assert "docker inspect mt5" not in readme
+    assert "docker compose -p trading-platform-mt5docker-1uotpe" in readme
+    assert "docker-compose.previous.yml" in readme
+    assert "MT5_VNC_PASSWORD" in readme
 
 
 def test_exact_patch_mismatch_is_executable_and_fail_closed(tmp_path: Path) -> None:

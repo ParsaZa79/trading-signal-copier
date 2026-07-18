@@ -13,12 +13,17 @@ services:
       - mt5-config:/config
     networks:
       - trading-mt5-api
+      - trading-mt5-egress
 
 volumes:
   mt5-config:
     name: trading-mt5-config
+    external: true
 
 networks:
   trading-mt5-api:
     name: trading-mt5-api
+    external: true
+  trading-mt5-egress:
+    name: trading-mt5-egress
     external: true
