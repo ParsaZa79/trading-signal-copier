@@ -1,0 +1,112 @@
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { Link2, ShieldCheck, TrendingUp, UserRoundSearch } from "lucide-react";
+import { AmbientAuthShader } from "./ambient-auth-shader";
+
+const journey = [
+  {
+    title: "Connect account",
+    description: "Link your MT5 account in minutes.",
+    icon: Link2,
+  },
+  {
+    title: "Choose a trader",
+    description: "Browse verified trading histories.",
+    icon: UserRoundSearch,
+  },
+  {
+    title: "Set your limits",
+    description: "Control risk with clear safeguards.",
+    icon: ShieldCheck,
+  },
+] as const;
+
+interface AuthShellProps {
+  children: ReactNode;
+  securityCopy?: string;
+}
+
+export function AuthShell({
+  children,
+  securityCopy = "We use secure verification to protect your account and data.",
+}: AuthShellProps) {
+  return (
+    <main className="min-h-dvh overflow-hidden bg-[#050506] text-text-primary">
+      <div className="mx-auto grid min-h-dvh w-full max-w-[1680px] lg:grid-cols-[minmax(0,1.18fr)_minmax(500px,0.96fr)]">
+        <section className="relative hidden min-h-dvh overflow-hidden border-r border-white/[0.09] lg:flex lg:flex-col lg:px-[clamp(3.5rem,6vw,6.75rem)] lg:py-[clamp(3.5rem,6vh,5.5rem)] [@media(max-height:800px)]:py-8">
+          <AmbientAuthShader />
+          <div className="pointer-events-none absolute inset-0 bg-black/10" aria-hidden="true" />
+
+          <Link
+            href="/"
+            aria-label="Signal Copier home"
+            className="relative z-10 flex w-fit items-center gap-3 rounded-lg text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+          >
+            <TrendingUp className="h-10 w-10 text-[#829cff]" strokeWidth={2.35} />
+            <span className="text-[clamp(1.5rem,2vw,2rem)] font-semibold tracking-[-0.035em]">
+              Signal Copier
+            </span>
+          </Link>
+
+          <div className="relative z-10 mt-[clamp(5.5rem,12vh,9.5rem)] max-w-[670px] [@media(max-height:800px)]:mt-12">
+            <h2 className="max-w-[650px] text-[clamp(3.1rem,4.45vw,4.65rem)] font-semibold leading-[0.99] tracking-[-0.055em] text-[#f7f7f9]">
+              <span className="block">Copy trades with</span>
+              <span className="block">limits you understand.</span>
+            </h2>
+            <p className="mt-8 max-w-[540px] text-[clamp(1.05rem,1.55vw,1.35rem)] leading-relaxed text-[#a6a6ad] [@media(max-height:800px)]:mt-5">
+              Connect your MT5 account, choose who to copy, and stay in control.
+            </p>
+          </div>
+
+          <ol className="relative z-10 mt-[clamp(8rem,20vh,13rem)] grid max-w-[760px] grid-cols-3 gap-6 [@media(max-height:800px)]:mt-auto [@media(max-height:800px)]:pt-6">
+            {journey.map(({ title, description, icon: Icon }, index) => (
+              <li key={title} className="relative min-w-0 text-center">
+                {index < journey.length - 1 ? (
+                  <span
+                    aria-hidden="true"
+                    className="absolute left-[calc(50%+2.75rem)] top-9 w-[calc(100%-3.5rem)] border-t border-dashed border-white/20 [@media(max-height:800px)]:top-[30px]"
+                  />
+                ) : null}
+                <span className="mx-auto flex h-[74px] w-[74px] items-center justify-center rounded-full border border-white/25 bg-black/20 text-[#829cff] backdrop-blur-sm [@media(max-height:800px)]:h-[60px] [@media(max-height:800px)]:w-[60px]">
+                  <Icon className="h-7 w-7" strokeWidth={1.7} />
+                </span>
+                <span className="mt-5 block text-sm font-semibold text-[#8da5ff] [@media(max-height:800px)]:mt-3">{index + 1}</span>
+                <span className="mt-2 block text-base font-medium text-text-primary">{title}</span>
+                <span className="mx-auto mt-1 block max-w-[180px] text-sm leading-snug text-[#8a8a92] [@media(max-height:800px)]:text-xs">
+                  {description}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section className="relative flex min-h-dvh items-center px-6 py-12 sm:px-10 lg:px-[clamp(3.5rem,5vw,5.5rem)] [@media(max-height:800px)]:py-8">
+          <div className="absolute inset-x-0 top-0 h-44 overflow-hidden opacity-45 lg:hidden" aria-hidden="true">
+            <AmbientAuthShader />
+          </div>
+
+          <div className="relative z-10 mx-auto w-full max-w-[520px] [@media(min-height:801px)]:translate-y-4">
+            <Link
+              href="/"
+              aria-label="Signal Copier home"
+              className="mb-14 flex w-fit items-center gap-2.5 rounded-lg text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 lg:hidden"
+            >
+              <TrendingUp className="h-8 w-8 text-[#829cff]" strokeWidth={2.35} />
+              <span className="text-xl font-semibold tracking-[-0.035em]">Signal Copier</span>
+            </Link>
+
+            {children}
+
+            <div className="mt-12 flex items-start gap-4 border-t border-white/[0.08] pt-9 [@media(max-height:800px)]:mt-6 [@media(max-height:800px)]:pt-5">
+              <ShieldCheck className="mt-0.5 h-9 w-9 shrink-0 text-[#829cff]" strokeWidth={1.8} />
+              <div>
+                <p className="text-sm font-medium text-[#a7a7ae]">Protected by secure verification</p>
+                <p className="mt-1 max-w-[400px] text-xs leading-relaxed text-[#6f6f77]">{securityCopy}</p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}

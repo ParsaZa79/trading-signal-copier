@@ -1,14 +1,16 @@
 import { cn } from "@/lib/utils";
-import { forwardRef, useState, type InputHTMLAttributes } from "react";
+import { forwardRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   error?: string;
+  labelClassName?: string;
+  leadingIcon?: ReactNode;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ className, label, error, id, type, ...props }, ref) => {
+  ({ className, label, labelClassName, leadingIcon, error, id, type, ...props }, ref) => {
     const inputId = id || label?.toLowerCase().replace(/\s+/g, "-");
     const [showPassword, setShowPassword] = useState(false);
     const isPassword = type === "password";
@@ -18,7 +20,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="block text-xs font-medium text-text-secondary mb-2 uppercase tracking-wide"
+            className={cn(
+              "mb-2 block text-xs font-medium uppercase tracking-wide text-text-secondary",
+              labelClassName,
+            )}
           >
             {label}
           </label>
@@ -36,17 +41,27 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
               "disabled:opacity-50 disabled:cursor-not-allowed",
               "transition-colors duration-200",
               error && "border-danger focus:border-danger focus:ring-danger/20",
+              leadingIcon && "pl-11",
               isPassword && "pr-11",
               className
             )}
             {...props}
           />
+          {leadingIcon && (
+            <span
+              aria-hidden="true"
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted"
+            >
+              {leadingIcon}
+            </span>
+          )}
           {isPassword && (
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-secondary transition-colors"
-              tabIndex={-1}
+              aria-label={showPassword ? "Hide password" : "Show password"}
+              aria-pressed={showPassword}
             >
               {showPassword ? (
                 <EyeOff className="w-4 h-4" />

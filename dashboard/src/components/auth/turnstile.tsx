@@ -26,6 +26,8 @@ export function Turnstile({ siteKey, onToken }: { siteKey: string; onToken: (tok
       "expired-callback": () => onToken(""),
       "error-callback": () => onToken(""),
       theme: "dark",
+      size: "flexible",
+      appearance: "interaction-only",
     });
   };
 
@@ -40,7 +42,7 @@ export function Turnstile({ siteKey, onToken }: { siteKey: string; onToken: (tok
   return (
     <>
       <Script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" strategy="afterInteractive" onLoad={render} />
-      <div id={id} ref={container} aria-label="Security verification" />
+      <div id={id} ref={container} aria-label="Security verification" className="min-h-0 w-full" />
     </>
   );
 }

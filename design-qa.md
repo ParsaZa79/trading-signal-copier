@@ -1,16 +1,18 @@
-# Account Setup Design QA
+# Authentication Design QA
 
 ## Evidence
 
-- Source visual truth: `/Users/parsaz/.codex/generated_images/019f7454-8bb0-7d92-9641-707b8c8d5f46/exec-014558b7-3b90-47e7-9232-a808e7ff476e.png`
-- Final desktop implementation: `/tmp/account-setup-broker-gallery-1440x1024-final.png`
-- Final mobile implementation: `/tmp/account-setup-broker-gallery-mobile-390x844-final.png`
-- Full-view comparison: `/tmp/account-setup-design-qa-final-comparison.png`
-- Focused broker/logo comparison: `/tmp/account-setup-design-qa-focused-logos.png`
-- Desktop viewport: 1440 × 1024
-- Mobile viewport: 390 × 844
+- Source visual truth: `/Users/parsaz/.codex/generated_images/019f7454-8bb0-7d92-9641-707b8c8d5f46/exec-961d25ee-f86e-4427-a229-e29666c71f53.png`
+- Final desktop sign-in implementation: `/tmp/signal-copier-auth-sign-in-icon-check.png`
+- Final mobile sign-in implementation: `/tmp/signal-copier-auth-mobile-390x844.png`
+- Final mobile sign-up implementation: `/tmp/signal-copier-auth-mobile-signup-390x844.png`
+- Full-view comparison: `/tmp/signal-copier-auth-design-qa-passed-full.png`
+- Focused shader/headline comparison: `/tmp/signal-copier-auth-design-qa-passed-left.png`
+- Focused form/security comparison: `/tmp/signal-copier-auth-design-qa-passed-right.png`
+- Desktop viewport: 1377 × 994. The 1487 × 1058 source was proportionally normalized and center-cropped to the browser viewport before comparison.
+- Mobile viewport: 390 × 844, rendered in a same-origin iframe so responsive media queries used a true 390px layout viewport.
 - Theme: dark
-- State: Account Setup step 1, AMarkets selected, all 24 supported broker brands searchable
+- State: local-only authentication preview; Better Auth production behavior remains intact and no credentials or account data were submitted.
 
 ## Findings
 
@@ -18,63 +20,77 @@ No actionable P0, P1, or P2 findings remain.
 
 ## Full-view comparison
 
-The verified implementation preserves the selected visual's central structure: compact navigation and top bar, four-step desktop progress path, focused broker heading, reassurance message, search field, two-row broker gallery, manual fallback, selected-broker summary, and quiet footer actions. The content width, card proportions, primary action placement, and dark visual hierarchy align closely with the source.
+The implementation preserves the selected composition: near-black split canvas, quiet vertical divider, Signal Copier mark, exact two-line beginner-facing headline, explanatory copy, three connected setup steps, focused authentication column, broad primary action, sign-up handoff, and lower security reassurance. The final comparison shows equivalent major-region proportions, content hierarchy, density, and vertical rhythm.
 
-## Focused comparison
+The user-selected blue field is implemented as a real WebGL fragment shader rather than a static image or CSS-gradient approximation. Its motion is intentionally slow and low-amplitude, with a reduced-motion still frame and hidden-canvas pausing so it feels alive without distracting from authentication.
 
-The focused board compares the broker gallery and its image assets at a readable scale. The implementation uses locally shipped broker marks instead of text initials or generated approximations. Each mark uses `object-contain` inside a consistent neutral image well so wide, square, light-background, and transparent source files stay recognizable without cropping or recoloring.
+## Focused comparisons
+
+- Shader and headline: the focused left comparison verifies the same indigo-blue concentration, black falloff, two-line headline wrap, icon journey, and generous empty space. The shader is intentionally non-identical frame to frame because motion was requested.
+- Form and security: the focused right comparison verifies matching heading hierarchy, 56px field height, leading email/lock icons, password visibility control, right-aligned recovery action, full-width CTA, secondary registration link, divider, and security message.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: Uses the product's Saans variable font, matching restrained weights, short beginner-facing copy, compact progress labels, and readable 14–16px body text. No important text is clipped.
-- Spacing and layout rhythm: Desktop preserves the selected two-row card composition, deliberate blank space before the summary row, and aligned footer actions. Mobile replaces the wide progress path with a compact progress indicator and keeps actions visible above the existing bottom navigation.
-- Colors and visual tokens: Existing background, border, text, accent, success, danger, and warning tokens are used throughout. Brand imagery is not recolored. No broker receives a performance or recommendation treatment.
-- Image quality and asset fidelity: All 24 supported broker brands have local image files in `dashboard/public/brokers`. Higher-resolution official public assets replace low-resolution favicons for IC Markets, LiteFinance, and OANDA. Logos are rendered as images, not CSS art, text glyphs, inline SVGs, or placeholders.
-- Copy and content: The screen explicitly explains that broker selection is only an account connection, not an investment choice. Technical server selection is deferred to step 2, credentials to step 3, and connection testing to step 4.
+- Fonts and typography: Uses the product's Saans variable font with restrained optical weights, tight display tracking, readable 14–18px form text, and the exact selected headline wrap. Labels remain sentence case and no important text clips on desktop.
+- Spacing and layout rhythm: Desktop uses the selected two-column ratio, aligned content gutters, setup-step placement, and right-column form width. A height-aware layout prevents clipping at a 1280 × 720 viewport. Mobile collapses to one calm column while preserving the brand mark and a subtle shader crop.
+- Colors and visual tokens: Retains the product's deep black surfaces, soft off-white type, muted secondary copy, subtle hairline borders, and blue-violet accent. The shader uses a darker indigo/blue field with black falloff instead of a neon or high-contrast effect.
+- Image quality and asset fidelity: The selected visual contains no photographic or raster hero asset. The ambient field is implemented by the requested live shader. Standard interface symbols use the established Lucide icon library rather than CSS drawings, emoji, or placeholder glyphs.
+- Copy and content: Sign-in, sign-up, password recovery, reset-password, closed-registration, and unconfigured-auth states all use the same beginner-first shell. The copy avoids return claims and explains account connection, trader selection, user-controlled limits, and secure verification in plain language.
 
 ## Comparison history
 
 ### Pass 1 — blocked
 
-- [P2] The desktop gallery exposed a clipped third row of brokers, making the implementation denser than the selected two-row visual.
-  - Fix: Kept the eight source-aligned broker cards above the fold while retaining search across all 24 supported brands.
-- [P2] The first mobile layout rendered the four desktop steps as a tall vertical list and pushed the primary action below the viewport.
-  - Fix: Added a compact mobile “Step 1 of 4” progress treatment, a two-column broker grid, and a sticky Back/Continue action bar above the existing mobile navigation.
+- [P2] The first desktop pass clipped the setup-step descriptions at a 1280 × 720 viewport.
+  - Fix: Added height-aware spacing, smaller step geometry at short viewports, and compact security spacing.
+- [P2] The first sign-up pass scrolled before the primary action and account-switch link were visible.
+  - Fix: Reduced short-viewport padding while preserving the larger selected composition at taller desktop sizes.
 
-### Pass 2 — passed
+### Pass 2 — blocked
 
-- Post-fix desktop evidence: `/tmp/account-setup-broker-gallery-1440x1024-final.png`
-- Post-fix mobile evidence: `/tmp/account-setup-broker-gallery-mobile-390x844-final.png`
+- [P2] The form column was narrower than the source and lacked the email/lock field icons visible in the selected direction.
+  - Fix: Matched the source gutter width and added accessible leading icons to the shared Input component.
+- [P2] The first shader pass was too broad and violet relative to the selected blue field.
+  - Fix: Shifted the field origin toward the left edge, tightened its falloff, moved the focal area upward, and tuned the blue channels while preserving slow motion.
+
+### Pass 3 — passed
+
+- Post-fix desktop evidence: `/tmp/signal-copier-auth-sign-in-icon-check.png`
+- Post-fix full comparison: `/tmp/signal-copier-auth-design-qa-passed-full.png`
+- Post-fix mobile evidence: `/tmp/signal-copier-auth-mobile-390x844.png` and `/tmp/signal-copier-auth-mobile-signup-390x844.png`
 - No actionable P0, P1, or P2 differences remain.
 
-## Interactions and responsive checks
+## Interactions, responsive behavior, and runtime checks
 
-- Broker search filters the complete supported directory and found Pepperstone from a partial query.
-- Selecting Pepperstone updates the selected state and advances to account type.
-- Live/Demo choice filters the exact server options for the selected broker.
-- Selecting `Pepperstone-MT5-Live01` advances to credentials and then the review screen.
-- The preview connection action reports a successful verified state without calling production services.
-- “My broker isn’t listed” advances to exact manual MT5 server entry.
-- Completed progress steps can be revisited and have accessible names.
-- Mobile viewport has no horizontal overflow (`scrollWidth: 384`, `innerWidth: 390`).
-- The mobile action bar remains above the existing bottom navigation.
-- A fresh desktop reload produced no browser console errors.
-- ESLint, Vitest, TypeScript, the Next.js production build, and `git diff --check` passed.
+- Password visibility toggles through a keyboard-focusable control with an explicit accessible name and pressed state.
+- Forgot-password switches to the reset-request form and returns to sign-in without losing the shared shell.
+- Sign-in and sign-up links preserve the local-only preview safely; preview submissions report that no authentication request was sent.
+- Sign-up keeps its primary action and sign-in handoff visible at 390 × 844; supporting security copy can continue below the initial viewport.
+- Desktop and mobile captures have no horizontal overflow.
+- Two shader frames captured 1.4 seconds apart produced different image hashes and a low mean pixel delta, confirming subtle—not distracting—motion.
+- A fresh desktop render produced no browser console errors.
+- ESLint passed.
+- Vitest passed: 77 tests, with 1 skipped integration test. The existing third-party `financial-flag-icons` source-map warning remains non-failing and unrelated.
+- TypeScript and the Next.js production build passed.
+- `git diff --check` passed.
 
 ## Follow-up polish
 
-- [P3] The generated source image sometimes redraws supplied brand marks as wordmarks. The implementation intentionally uses the actual locally sourced image files, so a few logo proportions differ from the generated mock while remaining more accurate to the broker identity.
-- [P3] The first eight brokers are presented above the fold to preserve the selected composition; the remaining supported brands are immediately available through search rather than adding a third visible row.
+- [P3] The generated source's decorative dashed wave is omitted. The moving shader already supplies the requested sense of aliveness, and adding another ambient motif would make the authentication screen busier.
+- [P3] The Cloudflare challenge may appear for higher-risk visitors. It uses the supported flexible width and interaction-only appearance, so the clean layout is preserved for most visitors while the security control remains available when required.
 
 ## Implementation checklist
 
-- [x] Four-step guided connection flow
-- [x] Searchable broker gallery
-- [x] 24 local broker logo assets
-- [x] Live/Demo and exact server selection
-- [x] Plain-language credential and review steps
-- [x] Manual server fallback
-- [x] Desktop and mobile verification
+- [x] Shared branded authentication shell
+- [x] Animated WebGL ambient shader
+- [x] Reduced-motion and hidden-canvas handling
+- [x] Sign-in and sign-up states
+- [x] Forgot-password and reset-password states
+- [x] Closed-registration and unconfigured-auth states
+- [x] Responsive desktop and mobile layouts
+- [x] Accessible password visibility control
+- [x] Local-only safe preview path
 - [x] Automated tests and production build
+- [x] Browser interaction and console verification
 
 final result: passed
