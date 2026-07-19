@@ -41,6 +41,13 @@ network, so Stalwart retains NAT/routed egress for MX lookup, outbound SMTP, DNS
 required Internet access. Lack of `internal: true` is intentional; isolation comes from the
 membership allowlist and unpublished ports.
 
+The Stalwart service has both `stalwart` and
+`mail.kiaparsaprintingmoneymachine.cloud` as aliases on this private network. The dashboard uses
+the fully qualified hostname on port 587 so STARTTLS verifies the public certificate while Docker
+resolves the connection directly to Stalwart instead of the host's unpublished port 587. Keep the
+FQDN alias and the dashboard's mail-network membership together; removing either breaks
+transactional email after the next container replacement.
+
 Creating the network is a one-time, server-changing maintenance action:
 
 ```sh
@@ -77,8 +84,9 @@ these volumes, or any listener already occupying port 25. In Dokploy, edit only 
 `lku4v_DVjO_BEJSSQgBZi` (`trading-dashboard`): under **Advanced -> Swarm Settings -> Network**,
 add target `trading-platform-mail` with alias `trading-dashboard`, retain its existing
 `dokploy-network`, save, preview the service spec, and redeploy only after explicit approval.
-Set the application SMTP endpoint to `stalwart:587`. Do not attach `trading-api`, `mt5`, or
-Traefik to this overlay.
+Set the application SMTP endpoint to
+`mail.kiaparsaprintingmoneymachine.cloud:587`. Do not attach `trading-api`, `mt5`, or Traefik to
+this overlay.
 
 After that maintenance, a manager-side read-only `docker network inspect
 trading-platform-mail` must show only the Stalwart and dashboard tasks (plus Swarm's own

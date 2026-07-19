@@ -53,7 +53,10 @@ def test_base_compose_has_only_public_smtp_and_private_submission() -> None:
     assert stalwart["labels"] == {"traefik.enable": "false"}
 
     assert set(stalwart["networks"]) == {"mail-private"}
-    assert stalwart["networks"]["mail-private"]["aliases"] == ["stalwart"]
+    assert stalwart["networks"]["mail-private"]["aliases"] == [
+        "stalwart",
+        "mail.kiaparsaprintingmoneymachine.cloud",
+    ]
     assert compose["networks"] == {
         "mail-private": {"external": True, "name": "trading-platform-mail"}
     }
