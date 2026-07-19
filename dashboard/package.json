@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "email:preview": "email dev --dir src/components/emails --port 3002",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -28,9 +29,11 @@
     "pg": "8.22.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-email": "^6.9.0",
     "tailwind-merge": "^3.4.0"
   },
   "devDependencies": {
+    "@react-email/ui": "6.9.0",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "8.0.1",

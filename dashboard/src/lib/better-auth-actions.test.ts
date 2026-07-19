@@ -25,6 +25,29 @@ describe("Better Auth form actions", () => {
     );
   });
 
+  it("reports a reset rate limit without exposing whether the account exists", async () => {
+    const requestPasswordResetCall = vi.fn().mockResolvedValue({
+      data: null,
+      error: {
+        status: 429,
+        statusText: "Too Many Requests",
+        message: "Too many requests. Please try again later.",
+      },
+    });
+
+    await expect(
+      requestPasswordReset(
+        { requestPasswordReset: requestPasswordResetCall },
+        "user@example.test",
+        "/sign-in/reset-password",
+        "captcha-token",
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      message: "Too many reset requests. Please wait before trying again.",
+    });
+  });
+
   it("submits a new password with its reset token", async () => {
     const resetPasswordCall = vi.fn().mockResolvedValue({ data: {}, error: null });
     await expect(resetPassword({ resetPassword: resetPasswordCall }, "token", "replacement-password")).resolves.toEqual({ ok: true });

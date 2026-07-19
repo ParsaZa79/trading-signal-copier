@@ -94,3 +94,44 @@ The user-selected blue field is implemented as a real WebGL fragment shader rath
 - [x] Browser interaction and console verification
 
 final result: passed
+
+---
+
+# Password reset email design QA
+
+- Source visual truth: `/Users/parsaz/.codex/generated_images/019f7454-8bb0-7d92-9641-707b8c8d5f46/exec-0bf38f4b-44a8-485b-bccd-9638691f0307.png`
+- Desktop implementation: `/Users/parsaz/Documents/Dev/Projects/Personal/trading-signal-copier/.playwright-cli/password-reset-email-final.png`
+- Mobile implementation: `/Users/parsaz/Documents/Dev/Projects/Personal/trading-signal-copier/.playwright-cli/password-reset-email-final-mobile.png`
+- Desktop viewport: 1024 × 1100
+- Mobile viewport: 390 × 844
+- State: password-reset email with a representative one-time reset URL
+
+## Full-view comparison evidence
+
+The selected third direction and the final rendered email were opened together at original detail. The implementation preserves the defining structure: dark email surface, blue-violet signal beam on the left, generated crossing-wave masthead, arrow wordmark, shield focus icon, direct reset heading, key-marked action area, prominent blue-violet button, shield safety note, fallback link, and branded footer. The copy remains intentionally shorter than the concept.
+
+## Focused-region comparison evidence
+
+A separate focused crop was not needed because the complete 600-pixel email and all text, borders, and button states are legible in the full-resolution desktop capture. The 390-pixel capture separately verifies heading wrapping, CTA width, safety-note wrapping, fallback URL wrapping, footer containment, and the uninterrupted left signal beam.
+
+## Findings
+
+- No P0, P1, or P2 visual differences remain.
+- Fonts and typography: the system sans stack is deliberately email-safe and closely matches the reference's modern grotesk character. Weight, hierarchy, line height, and mobile wrapping are clear.
+- Spacing and layout rhythm: the masthead, message, action card, safety note, fallback, and footer form a compact vertical rhythm with no clipped content or horizontal overflow at 390 pixels.
+- Colors and visual tokens: the near-black surfaces, graphite borders, off-white text, muted secondary copy, and `#829cff` accent match the selected direction.
+- Image quality and asset fidelity: the masthead uses the generated 1200 × 352 raster pattern with the arrow wordmark baked into the asset for consistent client rendering. The shield, key, and footer arrow are sharp 2× PNG assets derived from the product's icon language; the delivered email contains no SVG or CSS-drawn substitutes.
+- Copy and content: repeated labels and explanations were removed. The email retains the task, one-hour/single-use warning, ignore-if-unrequested guidance, and copyable fallback URL.
+- React Email's local preview reports only the expected HTTP warning for localhost asset URLs; the production renderer is tested to emit HTTPS asset URLs. Its compatibility panel flags progressive enhancements (rounded corners, overflow clipping, button box sizing, underline styling, and long-link breaking); unsupported clients degrade to square corners or less polished URL wrapping without losing the reset action, raster masthead, icons, or fallback URL.
+
+## Comparison history
+
+- Initial implementation: retained the signal beam and action hierarchy but omitted the reference's masthead pattern and icon placements; this was rejected as insufficiently faithful.
+- Fix: generated the signal-wave raster, composed a client-safe masthead, added the arrow, shield, key, safety, and footer icon placements, and retained the user's shorter copy.
+- Post-fix evidence: the final desktop and mobile captures show the chosen composition, complete assets, and no actionable fidelity or responsive issues.
+
+## Follow-up polish
+
+- P3: dedicated inbox-client screenshots in Outlook desktop could confirm the exact fallback-link wrapping and square-corner degradation, but this does not block the production-safe template.
+
+final result: passed

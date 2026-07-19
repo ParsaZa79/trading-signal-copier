@@ -1,4 +1,12 @@
-type AuthResult = { data?: unknown; error?: { code?: string; message?: string } | null };
+type AuthResult = {
+  data?: unknown;
+  error?: {
+    code?: string;
+    message?: string;
+    status?: number;
+    statusText?: string;
+  } | null;
+};
 type EmailSignInClient = {
   signIn: {
     email(input: { email: string; password: string }, options: { headers: Record<string, string> }): Promise<AuthResult>;
@@ -48,10 +56,16 @@ export async function requestPasswordReset(
   redirectTo: string,
   captchaToken: string,
 ) {
-  await client.requestPasswordReset(
+  const result = await client.requestPasswordReset(
     { email: email.trim(), redirectTo },
     { headers: authCaptchaHeaders(captchaToken) },
   );
+  if (result.error?.status === 429) {
+    return {
+      ok: false as const,
+      message: "Too many reset requests. Please wait before trying again.",
+    };
+  }
   return {
     ok: true as const,
     message: "If an account exists, a reset link has been sent.",

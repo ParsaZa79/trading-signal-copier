@@ -233,7 +233,11 @@ export function buildBetterAuthOptions(
       revokeSessionsOnPasswordReset: true,
       resetPasswordTokenExpiresIn: 60 * 60,
       sendResetPassword: async ({ user, url }) => {
-        sendEmailWithoutWaiting(sendEmail, passwordResetEmail(user.email, url));
+        await deliverAuthEmail(
+          sendEmail,
+          await passwordResetEmail(user.email, url),
+          "password-reset",
+        );
       },
       customSyntheticUser: ({ coreFields, additionalFields, id }) => ({
         ...additionalFields,
@@ -247,7 +251,11 @@ export function buildBetterAuthOptions(
     },
     emailVerification: {
       sendVerificationEmail: async ({ user, url }) => {
-        sendEmailWithoutWaiting(sendEmail, verificationEmail(user.email, url));
+        await deliverAuthEmail(
+          sendEmail,
+          verificationEmail(user.email, url),
+          "email-verification",
+        );
       },
       sendOnSignUp: true,
       sendOnSignIn: true,
@@ -470,13 +478,34 @@ function rejectHeaderCharacters(value: string, variable: string) {
   }
 }
 
-function sendEmailWithoutWaiting(
+async function deliverAuthEmail(
   sendEmail: AuthEmailSender,
   message: Parameters<AuthEmailSender>[0],
+  type: "password-reset" | "email-verification",
 ) {
-  void sendEmail(message).catch(() => {
-    console.error("[auth] Auth email delivery failed");
-  });
+  try {
+    await sendEmail(message);
+    console.info(`[auth] Auth email accepted by SMTP type=${type}`);
+  } catch (error) {
+    console.error(
+      `[auth] Auth email delivery failed type=${type} details=${JSON.stringify(authEmailErrorDetails(error))}`,
+    );
+    throw error;
+  }
+}
+
+function authEmailErrorDetails(error: unknown) {
+  if (!error || typeof error !== "object") return { code: "UNKNOWN" };
+
+  const candidate = error as Record<string, unknown>;
+  const details: Record<string, string | number> = {};
+  for (const key of ["code", "command", "responseCode", "syscall"] as const) {
+    const value = candidate[key];
+    if (typeof value === "string" || typeof value === "number") {
+      details[key] = value;
+    }
+  }
+  return Object.keys(details).length > 0 ? details : { code: "UNKNOWN" };
 }
 
 function authErrorResponse(status: number, error: string) {

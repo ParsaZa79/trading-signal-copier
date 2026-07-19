@@ -267,6 +267,44 @@ describe("Better Auth server options", () => {
     expect(options.emailAndPassword?.disableSignUp).toBe(false);
   });
 
+  it("awaits reset email delivery and logs only sanitized SMTP failure metadata", async () => {
+    const smtpError = Object.assign(new Error("connection failed for private@example.test"), {
+      code: "ETIMEDOUT",
+      command: "CONN",
+      responseCode: 421,
+    });
+    const sendEmail = vi.fn().mockRejectedValue(smtpError);
+    const errorLog = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const options = buildBetterAuthOptions(
+      resolveBetterAuthSettings(COMPLETE_ENV)!,
+      {} as Pool,
+      sendEmail,
+    );
+    const sendResetPassword = options.emailAndPassword?.sendResetPassword as unknown as (
+      input: {
+        user: { email: string };
+        url: string;
+      },
+    ) => Promise<void>;
+
+    await expect(
+      sendResetPassword({
+        user: { email: "private@example.test" },
+        url: "https://dashboard.example.test/reset?token=private-token",
+      }),
+    ).rejects.toBe(smtpError);
+
+    expect(sendEmail).toHaveBeenCalledOnce();
+    const logged = errorLog.mock.calls.flat().join(" ");
+    expect(logged).toContain("password-reset");
+    expect(logged).toContain("ETIMEDOUT");
+    expect(logged).toContain("CONN");
+    expect(logged).toContain("421");
+    expect(logged).not.toContain("private@example.test");
+    expect(logged).not.toContain("private-token");
+    errorLog.mockRestore();
+  });
+
   it("constructs runtime dependencies only after activation", () => {
     const { dependencies, pool, sendEmail, serverAuth } = makeDependencies();
 

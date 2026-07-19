@@ -1,4 +1,7 @@
 import nodemailer from "nodemailer";
+import { createElement } from "react";
+import { render } from "react-email";
+import { PasswordResetEmail } from "@/components/emails/password-reset-email";
 
 export interface SmtpSettings {
   from: string;
@@ -60,13 +63,18 @@ export function verificationEmail(to: string, url: string): AuthEmailMessage {
   };
 }
 
-export function passwordResetEmail(to: string, url: string): AuthEmailMessage {
-  const safeUrl = escapeHtml(url);
+export async function passwordResetEmail(to: string, url: string): Promise<AuthEmailMessage> {
+  const template = createElement(PasswordResetEmail, { resetUrl: url });
+  const [html, text] = await Promise.all([
+    render(template),
+    render(template, { plainText: true }),
+  ]);
+
   return {
     to,
-    subject: "Reset your password",
-    text: `Reset your password: ${url}`,
-    html: `<p>Reset your password:</p><p><a href="${safeUrl}">Reset password</a></p>`,
+    subject: "Reset your Signal Copier password",
+    text,
+    html,
   };
 }
 
