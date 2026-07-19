@@ -1,75 +1,80 @@
-# Positions Page Design QA
+# Account Setup Design QA
 
 ## Evidence
 
-- Selected source visual: `/Users/parsaz/.codex/generated_images/019f7454-8bb0-7d92-9641-707b8c8d5f46/exec-593a9ad7-d769-4491-bd8b-3a6e98f1c117.png`
-- Final desktop implementation: `/tmp/dashboard-positions-icon-fix.png`
-- Full comparison board: `/tmp/dashboard-positions-design-qa-verified-comparison.png`
-- Mobile implementation: `/tmp/dashboard-positions-revised-mobile-390x844.png`
+- Source visual truth: `/Users/parsaz/.codex/generated_images/019f7454-8bb0-7d92-9641-707b8c8d5f46/exec-014558b7-3b90-47e7-9232-a808e7ff476e.png`
+- Final desktop implementation: `/tmp/account-setup-broker-gallery-1440x1024-final.png`
+- Final mobile implementation: `/tmp/account-setup-broker-gallery-mobile-390x844-final.png`
+- Full-view comparison: `/tmp/account-setup-design-qa-final-comparison.png`
+- Focused broker/logo comparison: `/tmp/account-setup-design-qa-focused-logos.png`
 - Desktop viewport: 1440 × 1024
 - Mobile viewport: 390 × 844
 - Theme: dark
-- State: two open trades, one trade without a stop loss, and one pending order
+- State: Account Setup step 1, AMarkets selected, all 24 supported broker brands searchable
+
+## Findings
+
+No actionable P0, P1, or P2 findings remain.
 
 ## Full-view comparison
 
-The implementation preserves the selected option's beginner-first composition: a clear page title, one protection action, a three-part summary, full-width trade rows, and a quiet pending-orders disclosure. The rejected glossary panel is absent. Its former space now gives prices, results, protection status, and review actions a consistent left-to-right scan path.
+The verified implementation preserves the selected visual's central structure: compact navigation and top bar, four-step desktop progress path, focused broker heading, reassurance message, search field, two-row broker gallery, manual fallback, selected-broker summary, and quiet footer actions. The content width, card proportions, primary action placement, and dark visual hierarchy align closely with the source.
 
 ## Focused comparison
 
-No separate crop was needed because the controls and financial values remain legible in the full-size side-by-side board. The overlapping market badges were reviewed again after removing their outer circular clipping mask; both component badges now render completely.
+The focused board compares the broker gallery and its image assets at a readable scale. The implementation uses locally shipped broker marks instead of text initials or generated approximations. Each mark uses `object-contain` inside a consistent neutral image well so wide, square, light-background, and transparent source files stay recognizable without cropping or recoloring.
 
 ## Required fidelity surfaces
 
-- Typography: Uses the product's bundled font, tabular financial figures, short beginner-facing labels, and restrained secondary details.
-- Spacing and layout: Summary, trade rows, and pending-orders disclosure retain the source's deliberate vertical rhythm. Desktop and mobile have no horizontal overflow.
-- Color and tokens: Uses existing background, border, text, action, success, and warning tokens. Green and yellow communicate protection state without adding subjective trading judgments.
-- Assets: Uses the product's existing financial market icons. Multi-part currency and commodity badges render without an outer mask, avoiding clipped circles.
-- Copy: Replaces infrastructure and trading jargon with direct language such as “Result right now,” “Protected with a stop loss,” and “This trade can keep losing until you close it.”
+- Fonts and typography: Uses the product's Saans variable font, matching restrained weights, short beginner-facing copy, compact progress labels, and readable 14–16px body text. No important text is clipped.
+- Spacing and layout rhythm: Desktop preserves the selected two-row card composition, deliberate blank space before the summary row, and aligned footer actions. Mobile replaces the wide progress path with a compact progress indicator and keeps actions visible above the existing bottom navigation.
+- Colors and visual tokens: Existing background, border, text, accent, success, danger, and warning tokens are used throughout. Brand imagery is not recolored. No broker receives a performance or recommendation treatment.
+- Image quality and asset fidelity: All 24 supported broker brands have local image files in `dashboard/public/brokers`. Higher-resolution official public assets replace low-resolution favicons for IC Markets, LiteFinance, and OANDA. Logos are rendered as images, not CSS art, text glyphs, inline SVGs, or placeholders.
+- Copy and content: The screen explicitly explains that broker selection is only an account connection, not an investment choice. Technical server selection is deferred to step 2, credentials to step 3, and connection testing to step 4.
 
 ## Comparison history
 
 ### Pass 1 — blocked
 
-- [P2] The first implementation was vertically compressed compared with the selected visual.
-  - Fix: Increased the summary, trade-row, and pending-order heights to restore the intended calm density.
-- [P2] The original circular icon container clipped the overlapping parts of currency-pair badges.
-  - Fix: Removed the outer mask, border, and background for position market icons while preserving the two source badges.
+- [P2] The desktop gallery exposed a clipped third row of brokers, making the implementation denser than the selected two-row visual.
+  - Fix: Kept the eight source-aligned broker cards above the fold while retaining search across all 24 supported brands.
+- [P2] The first mobile layout rendered the four desktop steps as a tall vertical list and pushed the primary action below the viewport.
+  - Fix: Added a compact mobile “Step 1 of 4” progress treatment, a two-column broker grid, and a sticky Back/Continue action bar above the existing mobile navigation.
 
 ### Pass 2 — passed
 
-- Post-fix evidence: `/tmp/dashboard-positions-icon-fix.png`
-- No actionable P0, P1, or P2 visual or interaction issues remain.
+- Post-fix desktop evidence: `/tmp/account-setup-broker-gallery-1440x1024-final.png`
+- Post-fix mobile evidence: `/tmp/account-setup-broker-gallery-mobile-390x844-final.png`
+- No actionable P0, P1, or P2 differences remain.
 
 ## Interactions and responsive checks
 
-- “Protect the unprotected trade” opens the existing trade-review dialog for the unprotected position.
-- “Review trade” opens the selected position's editable protection controls.
-- Dialog cancellation closes without changing the trade.
-- Pending orders expand in place and expose their existing cancellation flow.
-- Browser-native confirmation UI was replaced with an in-product confirmation dialog.
-- The page was rendered at 390 × 844 with no horizontal overflow (`scrollWidth: 384`, `innerWidth: 390`).
-- A fresh reload produced no new browser console errors.
-- ESLint, Vitest, TypeScript, the Next.js production build, and `git diff --check` passed before release.
-
-## Findings
-
-No remaining P0, P1, or P2 findings.
+- Broker search filters the complete supported directory and found Pepperstone from a partial query.
+- Selecting Pepperstone updates the selected state and advances to account type.
+- Live/Demo choice filters the exact server options for the selected broker.
+- Selecting `Pepperstone-MT5-Live01` advances to credentials and then the review screen.
+- The preview connection action reports a successful verified state without calling production services.
+- “My broker isn’t listed” advances to exact manual MT5 server entry.
+- Completed progress steps can be revisited and have accessible names.
+- Mobile viewport has no horizontal overflow (`scrollWidth: 384`, `innerWidth: 390`).
+- The mobile action bar remains above the existing bottom navigation.
+- A fresh desktop reload produced no browser console errors.
+- ESLint, Vitest, TypeScript, the Next.js production build, and `git diff --check` passed.
 
 ## Follow-up polish
 
-- [P3] The generated source uses illustrative market badges, while the implementation uses the product's real financial icon package for consistency across the dashboard.
-- [P3] Technical lot and ticket details remain below the market name to preserve a predictable mobile scan order.
-- [P3] The populated preview reports the MT5 account as connected; this is intentionally more coherent than the source mock's waiting status.
+- [P3] The generated source image sometimes redraws supplied brand marks as wordmarks. The implementation intentionally uses the actual locally sourced image files, so a few logo proportions differ from the generated mock while remaining more accurate to the broker identity.
+- [P3] The first eight brokers are presented above the fold to preserve the selected composition; the remaining supported brands are immediately available through search rather than adding a third visible row.
 
 ## Implementation checklist
 
-- [x] Glossary panel removed
-- [x] Full-width beginner-first trade rows
-- [x] Real protection and review actions retained
-- [x] Unclipped overlapping market badges
-- [x] Pending-order disclosure and confirmation flow
+- [x] Four-step guided connection flow
+- [x] Searchable broker gallery
+- [x] 24 local broker logo assets
+- [x] Live/Demo and exact server selection
+- [x] Plain-language credential and review steps
+- [x] Manual server fallback
 - [x] Desktop and mobile verification
-- [x] Automated checks and production build
+- [x] Automated tests and production build
 
 final result: passed

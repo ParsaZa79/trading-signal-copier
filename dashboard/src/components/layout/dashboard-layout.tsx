@@ -137,6 +137,17 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (
     process.env.NEXT_PUBLIC_COPY_TRADING_PREVIEW === "true" &&
+    (pathname === "/config" || pathname === "/setup")
+  ) {
+    return (
+      <DashboardPreviewLayout state={pathname === "/setup" ? "setup" : "connected"}>
+        {children}
+      </DashboardPreviewLayout>
+    );
+  }
+
+  if (
+    process.env.NEXT_PUBLIC_COPY_TRADING_PREVIEW === "true" &&
     pathname.startsWith("/copy-trading")
   ) {
     return <CopyTradingPreviewLayout>{children}</CopyTradingPreviewLayout>;
