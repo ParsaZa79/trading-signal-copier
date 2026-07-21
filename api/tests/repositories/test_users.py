@@ -53,18 +53,18 @@ async def test_user_repository_defaults_verified_identity_to_trader(
 ) -> None:
     profile = await create_user_profile(
         repository_session,
-        auth_subject="better-auth-user-1",
+        auth_subject="workos-user-1",
         email="  TRADER@Example.COM ",
         email_verified=True,
     )
     await repository_session.flush()
 
-    assert profile.auth_subject == "better-auth-user-1"
+    assert profile.auth_subject == "workos-user-1"
     assert profile.email == "trader@example.com"
     assert profile.email_verified is True
     assert profile.role is UserRole.TRADER
     assert profile.status is UserStatus.ACTIVE
-    assert await get_user_by_auth_subject(repository_session, "better-auth-user-1") is profile
+    assert await get_user_by_auth_subject(repository_session, "workos-user-1") is profile
 
 
 @pytest.mark.integration
@@ -73,7 +73,7 @@ async def test_user_access_change_is_explicit_and_persisted(
 ) -> None:
     profile = await create_user_profile(
         repository_session,
-        auth_subject="better-auth-user-2",
+        auth_subject="workos-user-2",
         email="admin@example.com",
         email_verified=True,
     )

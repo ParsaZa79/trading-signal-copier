@@ -454,13 +454,13 @@ async def test_legacy_identity_link_is_idempotent(repository_session: AsyncSessi
     first = await link_legacy_identity(
         repository_session,
         user_id=user.auth_subject,
-        source="clerk",
+        source="legacy-auth",
         legacy_id="user_legacy_123",
     )
     second = await link_legacy_identity(
         repository_session,
         user_id=user.auth_subject,
-        source="clerk",
+        source="legacy-auth",
         legacy_id="user_legacy_123",
     )
 
@@ -488,7 +488,7 @@ async def test_concurrent_legacy_links_are_idempotent(
             alias = await link_legacy_identity(
                 session,
                 user_id=user.auth_subject,
-                source="clerk",
+                source="legacy-auth",
                 legacy_id="concurrent-legacy-id",
             )
             await session.commit()

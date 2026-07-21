@@ -1,16 +1,17 @@
 import json
-import time
 
-import jwt
 import pytest
-from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import HTTPException
 from starlette.datastructures import Headers
 
-from src import access_store, account_store, clerk_client, dependencies, runtime_data, security
+from src import access_store, account_store, dependencies, runtime_data, security
+from src.routers import access as access_router
 
 
 def _isolate_storage(monkeypatch, tmp_path):
+    monkeypatch.delenv("WORKOS_CLIENT_ID", raising=False)
+    monkeypatch.setenv("ACCESS_BOOTSTRAP_EMAILS", "owner@example.com")
+    monkeypatch.setenv("ACCESS_REQUIRE_INVITE", "false")
     monkeypatch.setattr(security, "USERS_PATH", tmp_path / "users.json")
     monkeypatch.setattr(security, "DEV_SECRET_PATH", tmp_path / ".dev_app_secret")
     monkeypatch.setattr(account_store, "ACCOUNTS_PATH", tmp_path / "accounts.json")
@@ -39,78 +40,27 @@ def test_auth_token_round_trip(monkeypatch, tmp_path):
     assert security.authenticate_credentials("owner@example.com", "wrong password") is None
 
 
-def test_clerk_verifier_prefers_token_issuer_jwks(monkeypatch):
-    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-    public_key = private_key.public_key()
-    issuer = "https://super-badger-66.clerk.accounts.dev"
-    audience = "https://dashboard.kiaparsaprintingmoneymachine.cloud"
-    now = int(time.time())
-    token = jwt.encode(
-        {
-            "iss": issuer,
-            "sub": "user_clerk_owner",
-            "sid": "sess_123",
-            "azp": audience,
-            "iat": now,
-            "nbf": now - 5,
-            "exp": now + 300,
-        },
-        private_key,
-        algorithm="RS256",
-        headers={"kid": "kid_123"},
-    )
-    urls: list[str] = []
-
-    class FakeSigningKey:
-        key = public_key
-
-    class FakeJwkClient:
-        def __init__(self, url: str, headers: dict | None = None) -> None:
-            urls.append(url)
-
-        def get_signing_key_from_jwt(self, raw_token: str) -> FakeSigningKey:
-            assert raw_token == token
-            return FakeSigningKey()
-
-    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
-    monkeypatch.setenv("CLERK_AUTHORIZED_PARTIES", audience)
-    monkeypatch.delenv("CLERK_JWKS_URL", raising=False)
-    monkeypatch.delenv("CLERK_ISSUER", raising=False)
-    monkeypatch.delenv("CLERK_JWT_KEY", raising=False)
-    monkeypatch.setattr(clerk_client, "PyJWKClient", FakeJwkClient)
-    clerk_client._jwk_client.cache_clear()
-
-    claims = clerk_client.verify_clerk_token(token)
-
-    assert claims is not None
-    assert claims["sub"] == "user_clerk_owner"
-    assert urls == [f"{issuer}/.well-known/jwks.json"]
-
-
-def test_dashboard_proxy_headers_authenticate_clerk_user(monkeypatch, tmp_path):
+def test_dashboard_proxy_headers_authenticate_workos_user(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
     monkeypatch.setenv("DASHBOARD_PROXY_SECRET", "shared-secret")
-    monkeypatch.setattr(
-        security,
-        "get_clerk_user_email",
-        lambda clerk_user_id: "proxy-user@example.com",
-    )
+    monkeypatch.setenv("ACCESS_BOOTSTRAP_EMAILS", "proxy-user@example.com")
 
-    user = security._clerk_user_from_proxy_headers(
+    user = security._workos_user_from_proxy_headers(
         Headers(
             {
                 "x-dashboard-proxy-auth": "shared-secret",
-                "x-clerk-user-id": "user_clerk_proxy",
-                "x-clerk-session-id": "sess_proxy",
+                "x-workos-user-id": "user_workos_proxy",
+                "x-workos-user-email": "proxy-user@example.com",
+                "x-workos-session-id": "sess_proxy",
             }
         )
     )
 
     assert user is not None
-    assert user["id"] == "user_clerk_proxy"
+    assert user["id"] == "user_workos_proxy"
     assert user["email"] == "proxy-user@example.com"
     assert user["role"] == "owner"
-    assert user["auth_provider"] == "clerk"
+    assert user["auth_provider"] == "workos"
     assert user["session_id"] == "sess_proxy"
 
 
@@ -177,29 +127,43 @@ def test_accounts_are_isolated(monkeypatch, tmp_path):
     assert second_config["MT5_PASSWORD"] == "two"
 
 
-def test_clerk_owner_bootstrap_migrates_legacy_accounts(monkeypatch, tmp_path):
+def test_workos_owner_bootstrap_migrates_legacy_accounts(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
-    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
 
     legacy_user = security.create_user("owner@example.com", "correct horse battery")
     legacy_account = account_store.create_account(legacy_user["id"], "Primary Account")
 
-    member = access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+    member = access_store.resolve_workos_member("user_workos_owner", "owner@example.com")
 
-    assert member["id"] == "user_clerk_owner"
+    assert member["id"] == "user_workos_owner"
     assert member["role"] == "owner"
     assert member["status"] == "active"
     assert member["active_account_id"] == legacy_account["id"]
-    assert account_store.get_account(legacy_account["id"], "user_clerk_owner") is not None
+    assert account_store.get_account(legacy_account["id"], "user_workos_owner") is not None
     assert account_store.get_account(legacy_account["id"], legacy_user["id"]) is None
 
 
-def test_uninvited_clerk_users_are_self_service_traders(monkeypatch, tmp_path):
+def test_workos_email_rebind_preserves_existing_dashboard_accounts(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
-    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
 
-    owner = access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
-    trader = access_store.resolve_clerk_member("user_clerk_trader", "trader@example.com")
+    previous = access_store.resolve_workos_member("previous_identity", "owner@example.com")
+    account = account_store.create_account(previous["id"], "Live Account")
+    access_store.set_member_active_account_id(previous["id"], account["id"])
+
+    rebound = access_store.resolve_workos_member("user_workos_owner", "OWNER@example.com")
+
+    assert rebound["id"] == "user_workos_owner"
+    assert rebound["role"] == "owner"
+    assert rebound["active_account_id"] == account["id"]
+    assert account_store.get_account(account["id"], "user_workos_owner") is not None
+    assert account_store.get_account(account["id"], "previous_identity") is None
+
+
+def test_uninvited_workos_users_are_self_service_traders(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+
+    owner = access_store.resolve_workos_member("user_workos_owner", "owner@example.com")
+    trader = access_store.resolve_workos_member("user_workos_trader", "trader@example.com")
 
     assert owner["role"] == "owner"
     assert trader["role"] == "trader"
@@ -207,15 +171,14 @@ def test_uninvited_clerk_users_are_self_service_traders(monkeypatch, tmp_path):
     assert trader["active_account_id"] is None
 
 
-def test_invite_only_mode_blocks_uninvited_clerk_users(monkeypatch, tmp_path):
+def test_invite_only_mode_blocks_uninvited_workos_users(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
-    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
     monkeypatch.setenv("ACCESS_REQUIRE_INVITE", "true")
 
-    access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+    access_store.resolve_workos_member("user_workos_owner", "owner@example.com")
 
     with pytest.raises(HTTPException) as exc_info:
-        access_store.resolve_clerk_member("user_clerk_trader", "trader@example.com")
+        access_store.resolve_workos_member("user_workos_trader", "trader@example.com")
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Access not granted"
@@ -289,43 +252,41 @@ def test_account_config_strips_telegram_overrides(monkeypatch, tmp_path):
     assert "TELEGRAM_SESSION_NAME" not in config
 
 
-def test_invited_clerk_user_links_pending_access(monkeypatch, tmp_path):
+def test_invited_workos_user_links_pending_access(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
-    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
 
     pending = access_store.invite_member(
         email="trader@example.com",
         role="trader",
-        invited_by="user_clerk_owner",
+        invited_by="user_workos_owner",
         invitation_id="inv_123",
         invitation_status="pending",
     )
 
-    member = access_store.resolve_clerk_member("user_clerk_trader", "trader@example.com")
+    member = access_store.resolve_workos_member("user_workos_trader", "trader@example.com")
     members = access_store.list_members()
 
     assert pending["status"] == "pending"
-    assert member["id"] == "user_clerk_trader"
-    assert member["clerk_user_id"] == "user_clerk_trader"
+    assert member["id"] == "user_workos_trader"
+    assert member["workos_user_id"] == "user_workos_trader"
     assert member["status"] == "active"
     assert member["invitation_status"] == "accepted"
     assert len(members) == 1
 
 
-def test_disabled_clerk_member_stays_blocked(monkeypatch, tmp_path):
+def test_disabled_workos_member_stays_blocked(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
-    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
 
-    access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+    access_store.resolve_workos_member("user_workos_owner", "owner@example.com")
     pending = access_store.invite_member(
         email="disabled@example.com",
         role="trader",
-        invited_by="user_clerk_owner",
+        invited_by="user_workos_owner",
     )
     access_store.update_member(pending["id"], status_value="disabled")
 
     with pytest.raises(HTTPException) as exc_info:
-        access_store.resolve_clerk_member("user_clerk_disabled", "disabled@example.com")
+        access_store.resolve_workos_member("user_workos_disabled", "disabled@example.com")
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "Access disabled"
@@ -333,15 +294,28 @@ def test_disabled_clerk_member_stays_blocked(monkeypatch, tmp_path):
 
 def test_access_store_keeps_at_least_one_active_owner(monkeypatch, tmp_path):
     _isolate_storage(monkeypatch, tmp_path)
-    monkeypatch.setenv("CLERK_SECRET_KEY", "sk_test")
 
-    owner = access_store.resolve_clerk_member("user_clerk_owner", "owner@example.com")
+    owner = access_store.resolve_workos_member("user_workos_owner", "owner@example.com")
 
     with pytest.raises(ValueError, match="At least one active owner"):
         access_store.update_member(owner["id"], status_value="disabled")
 
     with pytest.raises(ValueError, match="At least one active owner"):
         access_store.remove_member(owner["id"])
+
+
+async def test_access_route_validates_last_owner_before_deleting_workos_user(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+    owner = access_store.resolve_workos_member("user_workos_owner", "owner@example.com")
+    remote_deletions: list[str] = []
+    monkeypatch.setattr(access_router, "workos_management_enabled", lambda: True)
+    monkeypatch.setattr(access_router, "delete_workos_user", remote_deletions.append)
+
+    with pytest.raises(HTTPException) as exc_info:
+        await access_router.delete_access_member(owner["id"], current_user=owner)
+
+    assert exc_info.value.status_code == 400
+    assert remote_deletions == []
 
 
 class _RuntimeExecutor:

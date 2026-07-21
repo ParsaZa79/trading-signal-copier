@@ -19,7 +19,6 @@ from fastapi import Depends, Header, HTTPException, Request, WebSocket, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt import PyJWKClient
 
-from .clerk_client import clerk_enabled, get_clerk_user_email, verify_clerk_token
 from .runtime_data import DATA_DIR
 
 USERS_PATH = DATA_DIR / "users.json"
@@ -28,73 +27,69 @@ PASSWORD_ITERATIONS = 390_000
 TOKEN_TTL_SECONDS = int(os.getenv("AUTH_TOKEN_TTL_SECONDS", str(7 * 24 * 60 * 60)))
 
 _bearer = HTTPBearer(auto_error=False)
-BETTER_AUTH_ROLES = {"owner", "admin", "trader", "viewer"}
 
 
-def better_auth_enabled() -> bool:
-    return os.getenv("BETTER_AUTH_ENABLED", "").strip().lower() == "true"
+def workos_enabled() -> bool:
+    return bool(os.getenv("WORKOS_CLIENT_ID", "").strip())
 
 
 @lru_cache(maxsize=4)
-def _better_auth_jwk_client(jwks_url: str) -> PyJWKClient:
+def _workos_jwk_client(jwks_url: str) -> PyJWKClient:
     return PyJWKClient(jwks_url, timeout=10, cache_keys=True)
 
 
-def verify_better_auth_token(token: str) -> dict[str, Any] | None:
-    if not better_auth_enabled() or not token:
+def verify_workos_token(token: str) -> dict[str, Any] | None:
+    if not workos_enabled() or not token:
         return None
-    issuer = os.getenv("BETTER_AUTH_ISSUER", "").strip().rstrip("/")
-    audience = os.getenv("BETTER_AUTH_AUDIENCE", "").strip().rstrip("/")
-    jwks_url = os.getenv("BETTER_AUTH_JWKS_URL", "").strip()
-    if not issuer or not audience or not jwks_url.startswith("https://"):
+    client_id = os.getenv("WORKOS_CLIENT_ID", "").strip()
+    issuer = os.getenv("WORKOS_ISSUER", "").strip() or "https://api.workos.com/"
+    jwks_url = os.getenv("WORKOS_JWKS_URL", "").strip() or (
+        f"https://api.workos.com/sso/jwks/{client_id}"
+    )
+    if not client_id or not issuer.startswith("https://") or not jwks_url.startswith("https://"):
         return None
     try:
-        signing_key = _better_auth_jwk_client(jwks_url).get_signing_key_from_jwt(token)
+        signing_key = _workos_jwk_client(jwks_url).get_signing_key_from_jwt(token)
         claims = jwt.decode(
             token,
             signing_key.key,
             algorithms=["RS256"],
-            issuer=issuer,
-            audience=audience,
-            options={"require": ["exp", "iat", "iss", "aud", "sub"]},
+            options={
+                "require": ["exp", "iat", "iss", "sub", "sid"],
+                "verify_aud": False,
+            },
         )
     except Exception:
         return None
     subject = claims.get("sub")
-    email = claims.get("email")
-    role = claims.get("role")
     if (
         not isinstance(subject, str)
         or not subject
-        or not isinstance(email, str)
-        or "@" not in email
-        or claims.get("email_verified") is not True
-        or role not in BETTER_AUTH_ROLES
+        or str(claims.get("iss") or "").rstrip("/") != issuer.rstrip("/")
+        or not isinstance(claims.get("sid"), str)
+        or not claims.get("sid")
     ):
         return None
     return claims
 
 
-def _better_auth_user_from_token(token: str | None) -> dict[str, Any] | None:
-    claims = verify_better_auth_token(token or "")
+def _workos_user_from_token(token: str | None) -> dict[str, Any] | None:
+    claims = verify_workos_token(token or "")
     if not claims:
         return None
-    from .access_store import resolve_better_auth_member
+    from .access_store import resolve_workos_member_by_id
 
-    member = resolve_better_auth_member(str(claims["sub"]), str(claims["email"]).lower())
+    member = resolve_workos_member_by_id(str(claims["sub"]))
     if member.get("status") != "active":
         return None
-    member["auth_provider"] = "better-auth"
-    member["session_id"] = None
+    member["auth_provider"] = "workos"
+    member["session_id"] = claims.get("sid")
     return member
 
 
 def _user_from_bearer_token(token: str | None) -> dict[str, Any] | None:
-    if better_auth_enabled():
-        return _better_auth_user_from_token(token)
-    clerk_user = _clerk_user_from_token(token)
-    if clerk_user is not None:
-        return clerk_user
+    if workos_enabled():
+        return _workos_user_from_token(token)
     payload = decode_token(token or "")
     if not payload:
         return None
@@ -311,44 +306,7 @@ def _token_from_authorization_header(authorization: str | None) -> str | None:
     return authorization[len(prefix) :].strip() or None
 
 
-def _clerk_user_from_token(token: str | None) -> dict[str, Any] | None:
-    if not clerk_enabled() or not token:
-        return None
-
-    claims = verify_clerk_token(token)
-    if not claims:
-        return None
-
-    clerk_user_id = str(claims.get("sub") or "")
-    if not clerk_user_id:
-        return None
-
-    from .access_store import resolve_clerk_member
-
-    email = _clerk_email_from_claims(claims)
-    try:
-        member = resolve_clerk_member(clerk_user_id, email)
-    except HTTPException as error:
-        if email or error.status_code != status.HTTP_401_UNAUTHORIZED:
-            raise
-        email = get_clerk_user_email(clerk_user_id)
-        if not email:
-            return None
-        member = resolve_clerk_member(clerk_user_id, email)
-    member["auth_provider"] = "clerk"
-    member["session_id"] = claims.get("sid")
-    return member
-
-
-def _clerk_email_from_claims(claims: dict[str, Any]) -> str | None:
-    for key in ("email", "email_address", "primary_email_address"):
-        value = claims.get(key)
-        if isinstance(value, str) and value:
-            return value.lower()
-    return None
-
-
-def _clerk_user_from_proxy_headers(headers: Any) -> dict[str, Any] | None:
+def _workos_user_from_proxy_headers(headers: Any) -> dict[str, Any] | None:
     proxy_secret = os.getenv("DASHBOARD_PROXY_SECRET")
     supplied_secret = headers.get("x-dashboard-proxy-auth")
     if not supplied_secret:
@@ -359,29 +317,19 @@ def _clerk_user_from_proxy_headers(headers: Any) -> dict[str, Any] | None:
             detail="Authentication required",
         )
 
-    clerk_user_id = str(headers.get("x-clerk-user-id") or "")
-    if not clerk_user_id:
-        if better_auth_enabled():
-            return None
+    workos_user_id = str(headers.get("x-workos-user-id") or "").strip()
+    email = str(headers.get("x-workos-user-email") or "").strip().lower()
+    if not workos_user_id or not email:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
         )
 
-    from .access_store import resolve_clerk_member
+    from .access_store import resolve_workos_member
 
-    email = str(headers.get("x-clerk-user-email") or "").lower() or None
-    if not email:
-        email = get_clerk_user_email(clerk_user_id)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
-
-    member = resolve_clerk_member(clerk_user_id, email)
-    member["auth_provider"] = "clerk"
-    member["session_id"] = headers.get("x-clerk-session-id")
+    member = resolve_workos_member(workos_user_id, email)
+    member["auth_provider"] = "workos"
+    member["session_id"] = headers.get("x-workos-session-id")
     return member
 
 
@@ -389,7 +337,7 @@ async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> dict[str, Any]:
-    proxy_user = _clerk_user_from_proxy_headers(request.headers)
+    proxy_user = _workos_user_from_proxy_headers(request.headers)
     if proxy_user is not None:
         return proxy_user
 

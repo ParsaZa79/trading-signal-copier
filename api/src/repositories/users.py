@@ -1,4 +1,4 @@
-"""User profile repository; Better Auth tables are never queried directly."""
+"""User profile repository for WorkOS-authenticated application users."""
 
 from __future__ import annotations
 
@@ -53,7 +53,7 @@ async def get_user_by_auth_subject(
     session: AsyncSession,
     auth_subject: str,
 ) -> UserProfile | None:
-    """Resolve the application profile by stable Better Auth subject."""
+    """Resolve the application profile by stable WorkOS subject."""
     return await session.scalar(
         select(UserProfile).where(UserProfile.auth_subject == auth_subject.strip())
     )

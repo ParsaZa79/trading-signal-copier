@@ -8,6 +8,7 @@ from src.routers import mt5
 
 
 def test_mt5_brokers_endpoint_validates_and_serializes_catalog(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("WORKOS_CLIENT_ID", raising=False)
     monkeypatch.setattr(security, "USERS_PATH", tmp_path / "users.json")
     monkeypatch.setattr(security, "DEV_SECRET_PATH", tmp_path / ".dev_app_secret")
     user = security.create_user("owner@example.com", "correct horse battery")

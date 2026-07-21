@@ -1,4 +1,4 @@
-"""Application access records for Clerk-authenticated users."""
+"""Application authorization records linked to WorkOS identities."""
 
 from __future__ import annotations
 
@@ -11,7 +11,6 @@ from typing import Any
 
 from fastapi import HTTPException, status
 
-from .clerk_client import clerk_enabled
 from .runtime_data import DATA_DIR
 
 ACCESS_PATH = DATA_DIR / "access.json"
@@ -60,7 +59,7 @@ def _clean_email(email: str) -> str:
 def _sanitize_member(member: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": member["id"],
-        "clerk_user_id": member.get("clerk_user_id"),
+        "workos_user_id": member.get("workos_user_id"),
         "email": member["email"],
         "role": member.get("role", "trader"),
         "status": member.get("status", "active"),
@@ -132,12 +131,12 @@ def _member_by_email(store: dict[str, Any], email: str) -> dict[str, Any] | None
     return None
 
 
-def _member_by_clerk_id(store: dict[str, Any], clerk_user_id: str) -> dict[str, Any] | None:
-    member = store["members"].get(clerk_user_id)
+def _member_by_workos_id(store: dict[str, Any], workos_user_id: str) -> dict[str, Any] | None:
+    member = store["members"].get(workos_user_id)
     if isinstance(member, dict):
         return member
     for item in store["members"].values():
-        if isinstance(item, dict) and item.get("clerk_user_id") == clerk_user_id:
+        if isinstance(item, dict) and item.get("workos_user_id") == workos_user_id:
             return item
     return None
 
@@ -160,7 +159,7 @@ def _create_member(
     email: str,
     role: str,
     status_value: str,
-    clerk_user_id: str | None = None,
+    workos_user_id: str | None = None,
     invited_by: str | None = None,
     invitation_id: str | None = None,
     invitation_status: str | None = None,
@@ -169,7 +168,7 @@ def _create_member(
     now = _utc_now()
     member = {
         "id": member_id,
-        "clerk_user_id": clerk_user_id,
+        "workos_user_id": workos_user_id,
         "email": email,
         "role": role,
         "status": status_value,
@@ -184,51 +183,52 @@ def _create_member(
     return member
 
 
-def resolve_clerk_member(clerk_user_id: str, email: str | None = None) -> dict[str, Any]:
-    """Return the local access member for a verified Clerk identity."""
-    clean_email = _clean_email(email or "")
-    if not clerk_user_id:
+def resolve_workos_member(workos_user_id: str, email: str) -> dict[str, Any]:
+    """Link a verified WorkOS identity to the matching local access record."""
+    clean_id = workos_user_id.strip()
+    clean_email = _clean_email(email)
+    if not clean_id or not clean_email or "@" not in clean_email:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
         )
 
     store = _load_store()
-    member = _member_by_clerk_id(store, clerk_user_id)
+    member = _member_by_workos_id(store, clean_id)
     if member is not None:
         if member.get("status") != "active":
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
-        if clean_email:
-            member["email"] = clean_email
+        member["email"] = clean_email
+        member["workos_user_id"] = clean_id
         member["last_seen_at"] = _utc_now()
         member["updated_at"] = _utc_now()
         _save_store(store)
         return _sanitize_member(member)
 
-    if not clean_email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-        )
-
     invited = _member_by_email(store, clean_email)
-    if invited is not None and invited.get("status") in {"pending", "active"}:
+    if invited is not None:
+        if invited.get("status") == "disabled":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
+
         old_id = str(invited["id"])
-        invited["id"] = clerk_user_id
-        invited["clerk_user_id"] = clerk_user_id
+        migrated_active_account_id = (
+            _migrate_legacy_accounts(old_id, clean_id) if old_id != clean_id else None
+        )
+        invited["id"] = clean_id
+        invited["workos_user_id"] = clean_id
         invited["email"] = clean_email
         invited["status"] = "active"
         invited["invitation_status"] = "accepted"
+        invited["active_account_id"] = (
+            invited.get("active_account_id") or migrated_active_account_id
+        )
         invited["last_seen_at"] = _utc_now()
         invited["updated_at"] = _utc_now()
-        if old_id != clerk_user_id:
+        if old_id != clean_id:
             store["members"].pop(old_id, None)
-            store["members"][clerk_user_id] = invited
+            store["members"][clean_id] = invited
         _save_store(store)
         return _sanitize_member(invited)
-
-    if invited is not None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
 
     allowed_bootstrap = _bootstrap_emails()
     legacy_user = _legacy_user_for_email(clean_email)
@@ -238,20 +238,16 @@ def resolve_clerk_member(clerk_user_id: str, email: str | None = None) -> dict[s
     if has_active_owner and not _self_signup_enabled():
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
 
-    if legacy_user is None:
-        legacy_active_account_id = None
-    else:
-        legacy_active_account_id = (
-            _migrate_legacy_accounts(str(legacy_user["id"]), clerk_user_id)
-            if legacy_user is not None
-            else None
-        )
-
+    legacy_active_account_id = (
+        _migrate_legacy_accounts(str(legacy_user["id"]), clean_id)
+        if legacy_user is not None
+        else None
+    )
     role = "owner" if not has_active_owner else _default_self_signup_role()
     member = _create_member(
         store,
-        member_id=clerk_user_id,
-        clerk_user_id=clerk_user_id,
+        member_id=clean_id,
+        workos_user_id=clean_id,
         email=clean_email,
         role=role,
         status_value="active",
@@ -262,24 +258,16 @@ def resolve_clerk_member(clerk_user_id: str, email: str | None = None) -> dict[s
     return _sanitize_member(member)
 
 
-def resolve_better_auth_member(user_id: str, email: str) -> dict[str, Any]:
-    """Resolve a migrated Better Auth identity without rebinding canonical app ownership."""
-    clean_id = user_id.strip()
-    clean_email = _clean_email(email)
-    if not clean_id or not clean_email:
+def resolve_workos_member_by_id(workos_user_id: str) -> dict[str, Any]:
+    clean_id = workos_user_id.strip()
+    if not clean_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required",
         )
-
     store = _load_store()
-    member = store.get("members", {}).get(clean_id)
-    if (
-        not isinstance(member, dict)
-        or str(member.get("id") or "") != clean_id
-        or str(member.get("clerk_user_id") or "") != clean_id
-        or _clean_email(str(member.get("email") or "")) != clean_email
-    ):
+    member = _member_by_workos_id(store, clean_id)
+    if member is None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
     if member.get("status") != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
@@ -297,8 +285,6 @@ def set_member_active_account_id(member_id: str, account_id: str | None) -> None
 
 
 def require_access_admin(user: dict[str, Any]) -> None:
-    if not clerk_enabled() and user.get("auth_provider") != "clerk":
-        return
     if user.get("role") not in ACCESS_ADMIN_ROLES or user.get("status") != "active":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
 
@@ -311,11 +297,7 @@ def invite_member(
     invitation_id: str | None = None,
     invitation_status: str | None = None,
 ) -> dict[str, Any]:
-    clean_email = _clean_email(email)
-    if not clean_email or "@" not in clean_email:
-        raise ValueError("Enter a valid email address")
-    if role not in ACCESS_ROLES:
-        raise ValueError("Invalid role")
+    clean_email = validate_member_invitation(email, role)
 
     store = _load_store()
     member = _member_by_email(store, clean_email)
@@ -332,7 +314,7 @@ def invite_member(
         )
     else:
         member["role"] = role
-        member["status"] = "pending" if not member.get("clerk_user_id") else "active"
+        member["status"] = "pending" if not member.get("workos_user_id") else "active"
         member["invited_by"] = invited_by
         member["invitation_id"] = invitation_id or member.get("invitation_id")
         member["invitation_status"] = invitation_status or member.get("invitation_status")
@@ -340,6 +322,15 @@ def invite_member(
 
     _save_store(store)
     return _sanitize_member(member)
+
+
+def validate_member_invitation(email: str, role: str) -> str:
+    clean_email = _clean_email(email)
+    if not clean_email or "@" not in clean_email:
+        raise ValueError("Enter a valid email address")
+    if role not in ACCESS_ROLES:
+        raise ValueError("Invalid role")
+    return clean_email
 
 
 def _is_last_active_owner(store: dict[str, Any], member_id: str) -> bool:
@@ -382,11 +373,17 @@ def update_member(
 
 
 def remove_member(member_id: str) -> None:
+    validate_member_removal(member_id)
+    store = _load_store()
+    store["members"].pop(member_id, None)
+    _save_store(store)
+
+
+def validate_member_removal(member_id: str) -> dict[str, Any]:
     store = _load_store()
     member = store["members"].get(member_id)
     if not isinstance(member, dict):
         raise ValueError("Member not found")
     if member.get("role") == "owner" and _owner_count(store, exclude_member_id=member_id) == 0:
         raise ValueError("At least one active owner is required")
-    store["members"].pop(member_id, None)
-    _save_store(store)
+    return _sanitize_member(member)

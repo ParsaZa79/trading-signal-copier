@@ -1,4 +1,4 @@
-"""Application user profile linked to an external Better Auth subject."""
+"""Application user profile linked to a WorkOS subject."""
 
 from __future__ import annotations
 
