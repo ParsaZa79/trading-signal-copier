@@ -21,7 +21,6 @@ import { AnimatedSection, PageContainer } from "@/components/motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { CLERK_ENABLED } from "@/lib/auth-mode";
 import { cn } from "@/lib/utils";
 
 const ROLE_OPTIONS: AccessMember["role"][] = ["owner", "admin", "trader", "viewer"];
@@ -35,7 +34,7 @@ export default function AccessPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInviting, setIsInviting] = useState(false);
-  const [clerkInvitationsEnabled, setClerkInvitationsEnabled] = useState(false);
+  const [workosInvitationsEnabled, setWorkosInvitationsEnabled] = useState(false);
 
   const canManage = session.user.role === "owner" || session.user.role === "admin";
 
@@ -45,7 +44,7 @@ export default function AccessPage() {
     try {
       const result = await getAccessMembers();
       setMembers(result.members);
-      setClerkInvitationsEnabled(result.clerk.invitations_enabled);
+      setWorkosInvitationsEnabled(result.workos.invitations_enabled);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load access members");
     } finally {
@@ -71,15 +70,14 @@ export default function AccessPage() {
     setMessage(null);
     setError(null);
     try {
-      const redirectUrl = typeof window !== "undefined" ? `${window.location.origin}/sign-up` : undefined;
-      const result = await inviteAccessMember(cleanEmail, role, redirectUrl);
+      const result = await inviteAccessMember(cleanEmail, role);
       setMembers(result.members);
       setEmail("");
       setRole("trader");
       setMessage(
-        clerkInvitationsEnabled
+        workosInvitationsEnabled
           ? `Invitation sent to ${cleanEmail}.`
-          : `${cleanEmail} was added locally. Clerk invitations need env keys before email can be sent.`
+          : `${cleanEmail} was added locally. WorkOS invitations need server credentials before email can be sent.`
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not invite member");
@@ -126,20 +124,20 @@ export default function AccessPage() {
             <div className="flex items-center gap-2 rounded-xl border border-border-subtle bg-bg-tertiary/70 px-3 py-2">
               <Shield className="h-4 w-4 text-accent" />
               <span className="text-xs text-text-secondary">
-                {CLERK_ENABLED ? "Clerk enabled" : "Local auth fallback"}
+                WorkOS AuthKit
               </span>
             </div>
           }
         />
       </AnimatedSection>
 
-      {!CLERK_ENABLED && (
+      {!workosInvitationsEnabled && (
         <AnimatedSection>
           <div className="rounded-xl border border-warning/30 bg-warning/10 p-4">
-            <p className="text-sm font-medium text-warning">Clerk is not configured yet</p>
+            <p className="text-sm font-medium text-warning">WorkOS invitations are not configured yet</p>
             <p className="mt-1 text-xs text-text-muted">
-              The Access section is ready, but production needs Clerk env keys before invitations and
-              Clerk sign-in can take over.
+              Authentication code is ready, but the WorkOS server credentials are still required
+              before invitation email delivery can be tested.
             </p>
           </div>
         </AnimatedSection>
@@ -150,7 +148,7 @@ export default function AccessPage() {
           <PanelHeader
             eyebrow="Invite"
             title="Add email"
-            description="Send a Clerk invitation and grant app access"
+            description="Send a WorkOS invitation and grant app access"
           />
           <PanelBody>
             <form onSubmit={handleInvite} className="space-y-4">
@@ -199,7 +197,7 @@ export default function AccessPage() {
                       <th className="px-5 py-3 font-medium">Email</th>
                       <th className="px-5 py-3 font-medium">Role</th>
                       <th className="px-5 py-3 font-medium">Status</th>
-                      <th className="px-5 py-3 font-medium">Clerk</th>
+                      <th className="px-5 py-3 font-medium">WorkOS</th>
                       <th className="px-5 py-3 text-right font-medium">Actions</th>
                     </tr>
                   </thead>
@@ -241,7 +239,7 @@ export default function AccessPage() {
                         <td className="px-5 py-4">
                           <span className="inline-flex items-center gap-1.5 text-xs text-text-muted">
                             <KeyRound className="h-3.5 w-3.5" />
-                            {member.clerk_user_id ? "Linked" : member.invitation_status || "Pending"}
+                            {member.workos_user_id ? "Linked" : member.invitation_status || "Pending"}
                           </span>
                         </td>
                         <td className="px-5 py-4">

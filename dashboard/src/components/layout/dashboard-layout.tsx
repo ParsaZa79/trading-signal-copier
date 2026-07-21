@@ -1,8 +1,7 @@
 "use client";
 
 import { MobileNav, Sidebar } from "./sidebar";
-import { useAuth, useUser } from "@clerk/nextjs";
-import { AuthScreen } from "@/components/auth/auth-screen";
+import { useAccessToken, useAuth } from "@workos-inc/authkit-nextjs/components";
 import { SymbolIcon } from "@/components/dashboard/symbol-icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,28 +9,19 @@ import { useWebSocket } from "@/hooks/use-websocket";
 import {
   activateAccount,
   createAccount,
-  getBootstrapStatus,
   getMe,
   getSymbolPrice,
-  logout,
 } from "@/lib/api";
-import { BETTER_AUTH_ENABLED, CLERK_ENABLED } from "@/lib/auth-mode";
-import { authClient, getBetterAuthJwt } from "@/lib/auth-client";
-import {
-  clearStoredSession,
-  getStoredSession,
-  storeSession,
-  type AuthSession,
-} from "@/lib/auth-storage";
-import { setBetterAuthTokenProvider, setClerkTokenProvider } from "@/lib/clerk-token";
+import { type AuthSession, setActiveAccountId } from "@/lib/auth-storage";
+import { signOutAction } from "@/app/auth/actions";
 import { cn } from "@/lib/utils";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -102,7 +92,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     () => null
   );
 
-  if (pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up")) {
+  if (
+    pathname.startsWith("/sign-in") ||
+    pathname.startsWith("/sign-up") ||
+    pathname.startsWith("/reset-password")
+  ) {
     return <>{children}</>;
   }
 
@@ -153,15 +147,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     return <CopyTradingPreviewLayout>{children}</CopyTradingPreviewLayout>;
   }
 
-  if (CLERK_ENABLED) {
-    return <ClerkDashboardLayout>{children}</ClerkDashboardLayout>;
-  }
-
-  if (BETTER_AUTH_ENABLED) {
-    return <BetterAuthDashboardLayout>{children}</BetterAuthDashboardLayout>;
-  }
-
-  return <LocalAuthDashboardLayout>{children}</LocalAuthDashboardLayout>;
+  return <WorkOSDashboardLayout>{children}</WorkOSDashboardLayout>;
 }
 
 function CopyTradingPreviewLayout({ children }: DashboardLayoutProps) {
@@ -333,229 +319,118 @@ function DashboardPreviewLayout({
   );
 }
 
-function LocalAuthDashboardLayout({ children }: DashboardLayoutProps) {
-  const [session, setSessionState] = useState<AuthSession | null>(null);
-  const [setupRequired, setSetupRequired] = useState(false);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
-
-  const setSession = useCallback((nextSession: AuthSession) => {
-    storeSession(nextSession);
-    setSessionState(nextSession);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function bootstrap() {
-      const stored = getStoredSession();
-      if (stored) {
-        setSessionState(stored);
-        try {
-          const refreshed = await getMe();
-          if (!cancelled) {
-            setSessionState(refreshed);
-          }
-        } catch {
-          clearStoredSession();
-          if (!cancelled) setSessionState(null);
-        }
-      }
-
-      try {
-        const status = await getBootstrapStatus();
-        if (!cancelled) {
-          setSetupRequired(status.setup_required);
-        }
-      } catch {
-        if (!cancelled) setSetupRequired(false);
-      } finally {
-        if (!cancelled) setIsLoadingAuth(false);
-      }
-    }
-
-    bootstrap();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (isLoadingAuth) {
-    return (
-      <main className="min-h-screen bg-bg-primary flex items-center justify-center">
-        <p className="text-sm text-text-muted">Loading dashboard...</p>
-      </main>
-    );
-  }
-
-  if (!session) {
-    return (
-      <AuthScreen
-        setupRequired={setupRequired}
-        onAuthenticated={(nextSession) => {
-          setSetupRequired(false);
-          setSession(nextSession);
-        }}
-      />
-    );
-  }
-
-  return (
-    <AuthenticatedDashboardLayout session={session} setSession={setSession}>
-      {children}
-    </AuthenticatedDashboardLayout>
-  );
-}
-
-function BetterAuthDashboardLayout({ children }: DashboardLayoutProps) {
-  const { data: authSession, isPending } = authClient.useSession();
-  const [session, setSessionState] = useState<AuthSession | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [accessError, setAccessError] = useState<string | null>(null);
-  const setSession = useCallback((nextSession: AuthSession) => {
-    storeSession(nextSession);
-    setSessionState(nextSession);
-  }, []);
-
-  useEffect(() => {
-    if (isPending) return;
-    if (!authSession) {
-      clearStoredSession();
-      setSessionState(null);
-      setIsLoading(false);
-      return;
-    }
-    let cancelled = false;
-    let latestToken: string | null = null;
-    const resolveToken = async () => {
-      latestToken = (await getBetterAuthJwt()) ?? latestToken;
-      return latestToken;
-    };
-    setBetterAuthTokenProvider(resolveToken);
-    void (async () => {
-      setIsLoading(true);
-      setAccessError(null);
-      try {
-        const token = await resolveToken();
-        if (!token) throw new Error("Authentication required");
-        const refreshed = await getMe();
-        if (!cancelled) setSession({ ...refreshed, token });
-      } catch {
-        clearStoredSession();
-        if (!cancelled) {
-          setSessionState(null);
-          setAccessError("Access not granted");
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-      setBetterAuthTokenProvider(null);
-    };
-  }, [authSession, isPending, setSession]);
-
-  if (isPending || isLoading) return <main className="min-h-screen bg-bg-primary flex items-center justify-center"><p className="text-sm text-text-muted">Loading dashboard...</p></main>;
-  if (!authSession) return <ClerkSignedOutScreen />;
-  if (accessError || !session) return <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6"><div className="w-full max-w-md rounded-xl border border-border-subtle bg-bg-secondary p-6"><h1 className="text-xl font-semibold text-text-primary">Access not granted</h1><p className="mt-2 text-sm text-text-muted">Your account is not allowed to access this dashboard.</p><Button className="mt-5" variant="outline" onClick={() => authClient.signOut({ fetchOptions: { onSuccess: () => { window.location.href = "/sign-in"; } } })}>Sign out</Button></div></main>;
-  return <AuthenticatedDashboardLayout session={session} setSession={setSession} onLogout={async () => { await authClient.signOut(); window.location.href = "/sign-in"; }}>{children}</AuthenticatedDashboardLayout>;
-}
-
-function ClerkDashboardLayout({ children }: DashboardLayoutProps) {
-  const { getToken, isLoaded, isSignedIn, signOut } = useAuth();
-  const { user } = useUser();
+function WorkOSDashboardLayout({ children }: DashboardLayoutProps) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
+  const workosUserId = user?.id;
+  const {
+    accessToken,
+    loading: tokenLoading,
+    error: tokenError,
+    getAccessToken,
+  } = useAccessToken();
+  const getAccessTokenRef = useRef(getAccessToken);
   const [session, setSessionState] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [accessError, setAccessError] = useState<string | null>(null);
 
+  useEffect(() => {
+    getAccessTokenRef.current = getAccessToken;
+  }, [getAccessToken]);
+
+  useEffect(() => {
+    if (authLoading || user) return;
+    const search = window.location.search;
+    const returnTo = `${pathname}${search}`;
+    router.replace(`/sign-in?returnTo=${encodeURIComponent(returnTo)}`);
+  }, [authLoading, pathname, router, user]);
+
   const setSession = useCallback((nextSession: AuthSession) => {
-    storeSession(nextSession);
+    setActiveAccountId(nextSession.activeAccountId);
     setSessionState(nextSession);
   }, []);
 
   useEffect(() => {
-    if (!isLoaded) return;
-
-    if (!isSignedIn) {
-      clearStoredSession();
-      setSessionState(null);
-      setIsLoading(false);
-      return;
-    }
+    if (authLoading || !workosUserId) return;
 
     let cancelled = false;
-    let latestToken: string | null = null;
-    const resolveToken = async () => {
-      const freshToken = await getToken();
-      if (freshToken) {
-        latestToken = freshToken;
-      }
-      return latestToken;
-    };
-    setClerkTokenProvider(resolveToken);
 
     async function loadSession() {
       setIsLoading(true);
       setAccessError(null);
+
       try {
-        const token = await resolveToken();
+        const token = await getAccessTokenRef.current();
         if (!token) throw new Error("Authentication required");
-        const refreshed = await getMe();
-        if (!cancelled) {
-          setSession({
-            ...refreshed,
-            token,
-            user: {
-              ...refreshed.user,
-              email: refreshed.user.email || user?.primaryEmailAddress?.emailAddress || "",
-            },
-          });
+
+        let refreshed: AuthSession | null = null;
+        let lastError: unknown = null;
+        for (let attempt = 0; attempt < 2 && !refreshed; attempt += 1) {
+          try {
+            refreshed = await getMe(token);
+          } catch (error) {
+            lastError = error;
+            if (attempt === 0) {
+              await new Promise((resolve) => window.setTimeout(resolve, 350));
+            }
+          }
         }
+        if (!refreshed) throw lastError ?? new Error("Access not granted");
+        if (!cancelled) setSession(refreshed);
       } catch (error) {
-        clearStoredSession();
         if (!cancelled) {
           setSessionState(null);
-          setAccessError(error instanceof Error ? error.message : "Access not granted");
+          setAccessError(
+            error instanceof Error ? error.message : "Dashboard access could not be verified"
+          );
         }
       } finally {
         if (!cancelled) setIsLoading(false);
       }
     }
 
-    loadSession();
+    void loadSession();
     return () => {
       cancelled = true;
-      setClerkTokenProvider(null);
     };
-  }, [getToken, isLoaded, isSignedIn, setSession, user?.primaryEmailAddress?.emailAddress]);
+  }, [authLoading, setSession, workosUserId]);
 
-  if (!isLoaded || isLoading) {
+  useEffect(() => {
+    if (!accessToken) return;
+    setSessionState((current) =>
+      current && current.token !== accessToken ? { ...current, token: accessToken } : current
+    );
+  }, [accessToken]);
+
+  if (authLoading || !user || tokenLoading || isLoading) {
     return (
       <main className="min-h-screen bg-bg-primary flex items-center justify-center">
-        <p className="text-sm text-text-muted">Loading dashboard...</p>
+        <p className="text-sm text-text-muted">
+          {authLoading || user ? "Loading dashboard..." : "Opening sign in..."}
+        </p>
       </main>
     );
   }
 
-  if (!isSignedIn) {
-    return <ClerkSignedOutScreen />;
-  }
-
-  if (accessError || !session) {
+  if (accessError || tokenError || !session) {
     return (
       <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-xl border border-border-subtle bg-bg-secondary p-6">
           <p className="text-xs uppercase tracking-wider text-text-muted">Access</p>
-          <h1 className="mt-2 text-xl font-semibold text-text-primary">Access not granted</h1>
+          <h1 className="mt-2 text-xl font-semibold text-text-primary">
+            Dashboard access could not be verified
+          </h1>
           <p className="mt-2 text-sm text-text-muted">
-            Your Clerk sign-in worked, but this email is not allowed in the trading dashboard.
+            Your WorkOS session is valid, but this dashboard could not match it to an active access
+            record. Try signing in again; if this continues, ask an owner to verify your email.
           </p>
-          {accessError && <p className="mt-3 text-xs text-danger">{accessError}</p>}
-          <Button
-            className="mt-5"
-            variant="outline"
-            onClick={() => signOut({ redirectUrl: "/sign-in" })}
-          >
+          {(accessError || tokenError) && (
+            <p className="mt-3 text-xs text-danger">
+              {accessError || tokenError?.message}
+            </p>
+          )}
+          <Button className="mt-5" variant="outline" onClick={() => void signOutAction()}>
             Sign out
           </Button>
         </div>
@@ -567,30 +442,10 @@ function ClerkDashboardLayout({ children }: DashboardLayoutProps) {
     <AuthenticatedDashboardLayout
       session={session}
       setSession={setSession}
-      onLogout={() => signOut({ redirectUrl: "/sign-in" })}
+      onLogout={signOutAction}
     >
       {children}
     </AuthenticatedDashboardLayout>
-  );
-}
-
-function ClerkSignedOutScreen() {
-  return (
-    <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6">
-      <div className="w-full max-w-sm rounded-xl border border-border-subtle bg-bg-secondary p-6">
-        <p className="text-xs uppercase tracking-wider text-text-muted">Access</p>
-        <h1 className="mt-2 text-xl font-semibold text-text-primary">Sign in required</h1>
-        <p className="mt-2 text-sm text-text-muted">
-          Use your approved Clerk account to open the trading dashboard.
-        </p>
-        <Link
-          href="/sign-in"
-          className="mt-5 inline-flex h-10 items-center justify-center rounded-xl bg-text-primary px-4 text-sm font-semibold text-bg-primary hover:bg-text-secondary"
-        >
-          Sign in
-        </Link>
-      </div>
-    </main>
   );
 }
 
@@ -723,8 +578,7 @@ function AuthenticatedDashboardLayout({
       await onLogout();
       return;
     }
-    await logout();
-    window.location.reload();
+    await signOutAction();
   };
 
   if (shouldForceSetup) {

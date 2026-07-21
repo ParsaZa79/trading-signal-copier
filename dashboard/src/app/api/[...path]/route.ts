@@ -1,7 +1,5 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
+import { withAuth } from "@workos-inc/authkit-nextjs";
 import { NextRequest } from "next/server";
-import { AUTH_MODE } from "@/lib/auth-mode";
-import { hasApiProxyIdentity } from "@/lib/proxy-policy";
 
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_API_URL || "https://api.kiaparsaprintingmoneymachine.cloud";
 type RouteContext = { params: Promise<{ path: string[] }> };
@@ -9,17 +7,12 @@ const FORWARDED_RESPONSE_HEADERS = ["content-type"];
 const FORWARDED_REQUEST_HEADERS = ["accept", "content-type", "x-account-id"];
 
 async function proxyApiRequest(request: NextRequest, context: RouteContext) {
-  const betterAuthToken = request.headers.get("authorization");
-  const clerkAuth = AUTH_MODE === "clerk" ? await auth() : null;
-  const sessionId = clerkAuth?.sessionId;
-  const userId = clerkAuth?.userId;
-  if (!hasApiProxyIdentity(AUTH_MODE, betterAuthToken, userId)) {
+  const { user, accessToken, sessionId } = await withAuth();
+  if (!user || !accessToken) {
     return privateJson({ detail: "Authentication required" }, 401);
   }
   const proxySecret = process.env.DASHBOARD_PROXY_SECRET;
   if (!proxySecret) return privateJson({ detail: "Dashboard proxy is not configured" }, 500);
-  const clerkUser = AUTH_MODE === "clerk" ? await currentUser() : null;
-  const email = clerkUser?.primaryEmailAddress?.emailAddress || clerkUser?.emailAddresses?.find((item) => Boolean(item.emailAddress))?.emailAddress;
   const { path } = await context.params;
   const targetUrl = new URL(`/api/${path.join("/")}`, BACKEND_API_URL);
   targetUrl.search = request.nextUrl.search;
@@ -29,10 +22,10 @@ async function proxyApiRequest(request: NextRequest, context: RouteContext) {
     if (value) headers.set(header, value);
   }
   headers.set("x-dashboard-proxy-auth", proxySecret);
-  if (betterAuthToken) headers.set("authorization", betterAuthToken);
-  if (userId) headers.set("x-clerk-user-id", userId);
-  if (email) headers.set("x-clerk-user-email", email);
-  if (sessionId) headers.set("x-clerk-session-id", sessionId);
+  headers.set("authorization", `Bearer ${accessToken}`);
+  headers.set("x-workos-user-id", user.id);
+  headers.set("x-workos-user-email", user.email);
+  if (sessionId) headers.set("x-workos-session-id", sessionId);
   const hasBody = request.method !== "GET" && request.method !== "HEAD";
   const upstream = await fetch(targetUrl, {
     method: request.method,

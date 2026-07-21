@@ -337,7 +337,7 @@ export function AccountSetupContent({ editMode = false }: { editMode?: boolean }
 
       setMessage("Finishing account setup…");
       await completeAccountSetup();
-      const refreshed = await getMe();
+      const refreshed = await getMe(session.token);
       setVerifiedConnection({
         accountName,
         login: config.MT5_LOGIN,

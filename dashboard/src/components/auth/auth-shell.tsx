@@ -1,24 +1,11 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Link2, ShieldCheck, TrendingUp, UserRoundSearch } from "lucide-react";
-import { AmbientAuthShader } from "./ambient-auth-shader";
 
 const journey = [
-  {
-    title: "Connect account",
-    description: "Link your MT5 account in minutes.",
-    icon: Link2,
-  },
-  {
-    title: "Choose a trader",
-    description: "Browse verified trading histories.",
-    icon: UserRoundSearch,
-  },
-  {
-    title: "Set your limits",
-    description: "Control risk with clear safeguards.",
-    icon: ShieldCheck,
-  },
+  { title: "Connect account", description: "Link your MT5 account in minutes.", icon: Link2 },
+  { title: "Choose a trader", description: "Browse verified trading histories.", icon: UserRoundSearch },
+  { title: "Set your limits", description: "Control risk with clear safeguards.", icon: ShieldCheck },
 ] as const;
 
 interface AuthShellProps {
@@ -28,14 +15,20 @@ interface AuthShellProps {
 
 export function AuthShell({
   children,
-  securityCopy = "We use secure verification to protect your account and data.",
+  securityCopy = "Your identity is managed by WorkOS and your credentials never pass through the trading API.",
 }: AuthShellProps) {
   return (
     <main className="min-h-dvh overflow-hidden bg-[#050506] text-text-primary">
       <div className="mx-auto grid min-h-dvh w-full max-w-[1680px] lg:grid-cols-[minmax(0,1.18fr)_minmax(500px,0.96fr)]">
         <section className="relative hidden min-h-dvh overflow-hidden border-r border-white/[0.09] lg:flex lg:flex-col lg:px-[clamp(3.5rem,6vw,6.75rem)] lg:py-[clamp(3.5rem,6vh,5.5rem)] [@media(max-height:800px)]:py-8">
-          <AmbientAuthShader />
-          <div className="pointer-events-none absolute inset-0 bg-black/10" aria-hidden="true" />
+          <div
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_70%_at_5%_38%,rgba(50,97,220,0.42),transparent_62%),radial-gradient(ellipse_55%_48%_at_42%_72%,rgba(38,86,201,0.16),transparent_68%),linear-gradient(135deg,#050506_0%,#071020_48%,#050506_100%)]"
+            aria-hidden="true"
+          />
+          <div
+            className="pointer-events-none absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.04)_1px,transparent_1px)] [background-size:48px_48px]"
+            aria-hidden="true"
+          />
 
           <Link
             href="/"
@@ -64,15 +57,15 @@ export function AuthShell({
                 {index < journey.length - 1 ? (
                   <span
                     aria-hidden="true"
-                    className="absolute left-[calc(50%+2.75rem)] top-9 w-[calc(100%-3.5rem)] border-t border-dashed border-white/20 [@media(max-height:800px)]:top-[30px]"
+                    className="absolute left-[calc(50%+2.75rem)] top-9 w-[calc(100%-3.5rem)] border-t border-dashed border-white/20"
                   />
                 ) : null}
-                <span className="mx-auto flex h-[74px] w-[74px] items-center justify-center rounded-full border border-white/25 bg-black/20 text-[#829cff] backdrop-blur-sm [@media(max-height:800px)]:h-[60px] [@media(max-height:800px)]:w-[60px]">
+                <span className="mx-auto flex h-[74px] w-[74px] items-center justify-center rounded-full border border-white/25 bg-black/20 text-[#829cff] backdrop-blur-sm">
                   <Icon className="h-7 w-7" strokeWidth={1.7} />
                 </span>
-                <span className="mt-5 block text-sm font-semibold text-[#8da5ff] [@media(max-height:800px)]:mt-3">{index + 1}</span>
+                <span className="mt-5 block text-sm font-semibold text-[#8da5ff]">{index + 1}</span>
                 <span className="mt-2 block text-base font-medium text-text-primary">{title}</span>
-                <span className="mx-auto mt-1 block max-w-[180px] text-sm leading-snug text-[#8a8a92] [@media(max-height:800px)]:text-xs">
+                <span className="mx-auto mt-1 block max-w-[180px] text-sm leading-snug text-[#8a8a92]">
                   {description}
                 </span>
               </li>
@@ -81,11 +74,11 @@ export function AuthShell({
         </section>
 
         <section className="relative flex min-h-dvh items-center px-6 py-12 sm:px-10 lg:px-[clamp(3.5rem,5vw,5.5rem)] [@media(max-height:800px)]:py-8">
-          <div className="absolute inset-x-0 top-0 h-44 overflow-hidden opacity-45 lg:hidden" aria-hidden="true">
-            <AmbientAuthShader />
-          </div>
-
-          <div className="relative z-10 mx-auto w-full max-w-[520px] [@media(min-height:801px)]:translate-y-4">
+          <div
+            className="pointer-events-none absolute inset-x-0 top-0 h-52 bg-[radial-gradient(ellipse_80%_100%_at_20%_0%,rgba(67,111,225,0.3),transparent_70%)] lg:hidden"
+            aria-hidden="true"
+          />
+          <div className="relative z-10 mx-auto w-full max-w-[520px]">
             <Link
               href="/"
               aria-label="Signal Copier home"
@@ -97,11 +90,13 @@ export function AuthShell({
 
             {children}
 
-            <div className="mt-12 flex items-start gap-4 border-t border-white/[0.08] pt-9 [@media(max-height:800px)]:mt-6 [@media(max-height:800px)]:pt-5">
+            <div className="mt-10 flex items-start gap-4 border-t border-white/[0.08] pt-8">
               <ShieldCheck className="mt-0.5 h-9 w-9 shrink-0 text-[#829cff]" strokeWidth={1.8} />
               <div>
                 <p className="text-sm font-medium text-[#a7a7ae]">Protected by secure verification</p>
-                <p className="mt-1 max-w-[400px] text-xs leading-relaxed text-[#6f6f77]">{securityCopy}</p>
+                <p className="mt-1 max-w-[400px] text-xs leading-relaxed text-[#6f6f77]">
+                  {securityCopy}
+                </p>
               </div>
             </div>
           </div>

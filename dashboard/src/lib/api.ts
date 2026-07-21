@@ -1,12 +1,9 @@
 import { REST_API_URL } from "./constants";
 import {
-  clearStoredSession,
   getActiveAccountId,
-  storeSession,
   type AuthSession,
   type DashboardAccount,
 } from "./auth-storage";
-import { getApiToken } from "./clerk-token";
 import type { BrokerServerOption } from "./broker-servers";
 import type {
   Position,
@@ -44,11 +41,6 @@ async function fetchApi<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  const token = await getApiToken();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
-
   const accountId = getActiveAccountId();
   if (accountId) {
     headers.set("X-Account-Id", accountId);
@@ -61,94 +53,28 @@ async function fetchApi<T>(
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    if (response.status === 401) {
-      clearStoredSession();
-    }
     throw new Error(error.detail || `HTTP ${response.status}`);
   }
 
   return response.json();
 }
 
-function normalizeAuthSession(response: {
-  token: string;
-  user: AuthSession["user"];
-  accounts: DashboardAccount[];
-  active_account_id: string | null;
-  setup_complete?: boolean;
-}): AuthSession {
-  return {
-    token: response.token,
-    user: response.user,
-    accounts: response.accounts,
-    activeAccountId: response.active_account_id,
-    setupComplete: Boolean(response.setup_complete),
-  };
-}
-
-export async function getBootstrapStatus(): Promise<{ setup_required: boolean }> {
-  return fetchApi("/api/auth/bootstrap");
-}
-
-export async function setupAdmin(email: string, password: string): Promise<AuthSession> {
-  const response = await fetchApi<{
-    token: string;
-    user: AuthSession["user"];
-    accounts: DashboardAccount[];
-    active_account_id: string | null;
-    setup_complete?: boolean;
-  }>("/api/auth/setup", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-  const session = normalizeAuthSession(response);
-  storeSession(session);
-  return session;
-}
-
-export async function login(email: string, password: string): Promise<AuthSession> {
-  const response = await fetchApi<{
-    token: string;
-    user: AuthSession["user"];
-    accounts: DashboardAccount[];
-    active_account_id: string | null;
-    setup_complete?: boolean;
-  }>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-  const session = normalizeAuthSession(response);
-  storeSession(session);
-  return session;
-}
-
 export const AUTH_SESSION_ENDPOINT = "/api/access/me";
 
-export async function getMe(): Promise<AuthSession> {
+export async function getMe(accessToken: string): Promise<AuthSession> {
   const response = await fetchApi<{
     user: AuthSession["user"];
     accounts: DashboardAccount[];
     active_account_id: string | null;
     setup_complete?: boolean;
   }>(AUTH_SESSION_ENDPOINT);
-  const existing = await getApiToken();
-  if (!existing) {
-    throw new Error("Authentication required");
-  }
-  const session: AuthSession = {
-    token: existing,
+  return {
+    token: accessToken,
     user: response.user,
     accounts: response.accounts,
     activeAccountId: response.active_account_id,
     setupComplete: Boolean(response.setup_complete),
   };
-  storeSession(session);
-  return session;
-}
-
-export async function logout(): Promise<void> {
-  await fetchApi("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-  clearStoredSession();
 }
 
 export async function getAccounts(): Promise<{
@@ -216,7 +142,7 @@ export async function completeAccountSetup(): Promise<{
 
 export interface AccessMember {
   id: string;
-  clerk_user_id?: string | null;
+  workos_user_id?: string | null;
   email: string;
   role: "owner" | "admin" | "trader" | "viewer";
   status: "active" | "disabled" | "pending";
@@ -233,22 +159,20 @@ export async function getAccessMembers(): Promise<{
   success: boolean;
   members: AccessMember[];
   roles: AccessMember["role"][];
-  clerk: { enabled: boolean; invitations_enabled: boolean };
+  workos: { enabled: boolean; invitations_enabled: boolean };
 }> {
   return fetchApi("/api/access");
 }
 
 export async function inviteAccessMember(
   email: string,
-  role: AccessMember["role"],
-  redirectUrl?: string
+  role: AccessMember["role"]
 ): Promise<{ success: boolean; member: AccessMember; members: AccessMember[] }> {
   return fetchApi("/api/access/members", {
     method: "POST",
     body: JSON.stringify({
       email,
       role,
-      redirect_url: redirectUrl,
     }),
   });
 }

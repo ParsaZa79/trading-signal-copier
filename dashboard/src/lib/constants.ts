@@ -1,12 +1,12 @@
-import { AUTH_MODE } from "./auth-mode";
-
 // API configuration
 // Default to production URLs. In standalone builds, NEXT_PUBLIC_* env vars
 // are NOT inlined due to Next.js bug (vercel/next.js#80194), so the fallback
 // is the production URL. In dev mode, env vars work normally via .env.local.
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "https://api.kiaparsaprintingmoneymachine.cloud";
-export const REST_API_URL = AUTH_MODE === "local" ? API_URL : "";
+// Browser requests always pass through the authenticated Next.js proxy. The
+// WorkOS session cookie remains HTTP-only and never enters application storage.
+export const REST_API_URL = "";
 export const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL || "wss://api.kiaparsaprintingmoneymachine.cloud/ws";
 

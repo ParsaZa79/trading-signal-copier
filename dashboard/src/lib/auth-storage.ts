@@ -3,7 +3,7 @@ export interface DashboardUser {
   email: string;
   role?: "owner" | "admin" | "trader" | "viewer";
   status?: "active" | "disabled" | "pending";
-  auth_provider?: "local" | "clerk" | "better-auth";
+  auth_provider?: "local" | "workos";
   active_account_id?: string | null;
   created_at?: string;
 }
@@ -25,53 +25,24 @@ export interface AuthSession {
   setupComplete: boolean;
 }
 
-const STORAGE_KEY = "signal_copier_auth";
+const ACTIVE_ACCOUNT_KEY = "signal_copier_active_account";
 
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
-export function getStoredSession(): AuthSession | null {
-  if (!canUseStorage()) return null;
-  try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as AuthSession;
-    if (!parsed.token) return null;
-    return {
-      ...parsed,
-      activeAccountId: parsed.activeAccountId ?? null,
-      setupComplete: Boolean(parsed.setupComplete),
-    };
-  } catch {
-    return null;
-  }
-}
-
-export function storeSession(session: AuthSession) {
-  if (!canUseStorage()) return;
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
-  window.dispatchEvent(new Event("signal-copier-auth-changed"));
-}
-
-export function clearStoredSession() {
-  if (!canUseStorage()) return;
-  window.localStorage.removeItem(STORAGE_KEY);
-  window.dispatchEvent(new Event("signal-copier-auth-changed"));
-}
-
-export function getAuthToken(): string | null {
-  return getStoredSession()?.token ?? null;
-}
-
 export function getActiveAccountId(): string | null {
-  return getStoredSession()?.activeAccountId ?? null;
+  if (!canUseStorage()) return null;
+  return window.localStorage.getItem(ACTIVE_ACCOUNT_KEY);
 }
 
-export function setActiveAccountId(accountId: string) {
-  const session = getStoredSession();
-  if (!session) return;
-  storeSession({ ...session, activeAccountId: accountId });
+export function setActiveAccountId(accountId: string | null) {
+  if (!canUseStorage()) return;
+  if (accountId) {
+    window.localStorage.setItem(ACTIVE_ACCOUNT_KEY, accountId);
+  } else {
+    window.localStorage.removeItem(ACTIVE_ACCOUNT_KEY);
+  }
 }
 
 export function buildAuthenticatedWsUrl(baseUrl: string, token: string, accountId: string) {
