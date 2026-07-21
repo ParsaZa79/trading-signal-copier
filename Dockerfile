@@ -36,8 +36,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 CMD ["sh", "-c", "if [ -n \"$DATABASE_URL\" ] && printf '%s' \"$DATABASE_URL\" | grep -q '^postgresql'; then uv run --no-sync alembic upgrade head; fi; exec uv run --no-sync uvicorn src.main:app --host 0.0.0.0 --port 8000"]
 
 
-# --------------- Dashboard Stage ---------------
-FROM oven/bun:1.3.4 AS dashboard
+# --------------- Dashboard Build Stage ---------------
+FROM oven/bun:1.3.4 AS dashboard-build
 
 WORKDIR /app
 COPY dashboard/package.json dashboard/bun.lock ./
@@ -59,9 +59,25 @@ ENV NEXT_PUBLIC_STRATEGY_LAB_ENABLED=$NEXT_PUBLIC_STRATEGY_LAB_ENABLED
 ENV NEXT_PUBLIC_BETTER_AUTH_ENABLED=$NEXT_PUBLIC_BETTER_AUTH_ENABLED
 ENV NEXT_PUBLIC_OPEN_SIGNUP_ENABLED=$NEXT_PUBLIC_OPEN_SIGNUP_ENABLED
 ENV NEXT_PUBLIC_TURNSTILE_SITE_KEY=$NEXT_PUBLIC_TURNSTILE_SITE_KEY
+ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
 
+# --------------- Dashboard Runtime Stage ---------------
+# Keep the Dokploy target name `dashboard`, but export only Next.js' traced
+# standalone server instead of the ~1 GB build-time dependency tree.
+FROM oven/bun:1.3.4 AS dashboard
+
+WORKDIR /app
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+
+COPY --from=dashboard-build --chown=bun:bun /app/public ./public
+COPY --from=dashboard-build --chown=bun:bun /app/.next/standalone ./
+COPY --from=dashboard-build --chown=bun:bun /app/.next/static ./.next/static
+
+USER bun
 EXPOSE 3000
 
-CMD ["bun", "run", "start"]
+CMD ["bun", "server.js"]
