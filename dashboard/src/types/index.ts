@@ -77,7 +77,12 @@ export interface WebSocketMessage {
   timestamp: string;
   account_id?: string;
   positions?: Position[];
-  account?: AccountInfo;
+  account?: AccountInfo | null;
+  connection?: {
+    status: "connected" | "degraded" | "disconnected";
+    stale: boolean;
+    last_success_at: string | null;
+  };
   error?: string;
 }
 

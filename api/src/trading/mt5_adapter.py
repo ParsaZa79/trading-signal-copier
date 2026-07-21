@@ -31,6 +31,7 @@ import os
 import sys
 from abc import ABC, abstractmethod
 from contextlib import suppress
+from threading import RLock
 from typing import Any
 
 # Platform detection
@@ -591,22 +592,28 @@ class LinuxMT5Adapter(MT5AdapterBase):
         self.host = host or os.getenv("MT5_DOCKER_HOST", "localhost")
         self.port = port or int(os.getenv("MT5_DOCKER_PORT", "8001"))
         self._conn: Any = None
+        # RPyC's classic connection is shared by the WebSocket broadcaster and
+        # authenticated HTTP routes. Serialize remote calls so concurrent price
+        # and account reads cannot corrupt the request/response stream.
+        self._request_lock = RLock()
 
     def _eval(self, code: str) -> Any:
         """Evaluate a Python expression on the remote MT5 server."""
-        if not self._conn:
-            return None
-        return self._conn.eval(code)
+        with self._request_lock:
+            if not self._conn:
+                return None
+            return self._conn.eval(code)
 
     def initialize(self) -> bool:
         """Initialize the RPyC bridge to the remote MT5 Python process."""
         try:
             import rpyc  # type: ignore[import-untyped]
 
-            self._conn = rpyc.classic.connect(self.host, self.port)
-            self._conn._config["sync_request_timeout"] = 300
-            self._conn.execute("import MetaTrader5 as mt5")
-            self._conn.execute("import datetime")
+            with self._request_lock:
+                self._conn = rpyc.classic.connect(self.host, self.port)
+                self._conn._config["sync_request_timeout"] = 300
+                self._conn.execute("import MetaTrader5 as mt5")
+                self._conn.execute("import datetime")
             return True
         except Exception as e:
             print(f"MT5 initialization failed: {e}")
@@ -636,12 +643,13 @@ class LinuxMT5Adapter(MT5AdapterBase):
 
     def shutdown(self) -> None:
         """Shutdown MT5 connection."""
-        if self._conn:
-            with suppress(Exception):
-                self._eval("mt5.shutdown()")
-            with suppress(Exception):
-                self._conn.close()
-            self._conn = None
+        with self._request_lock:
+            if self._conn:
+                with suppress(Exception):
+                    self._eval("mt5.shutdown()")
+                with suppress(Exception):
+                    self._conn.close()
+                self._conn = None
 
     def last_error(self) -> tuple[int, str]:
         """Get last error from MT5."""

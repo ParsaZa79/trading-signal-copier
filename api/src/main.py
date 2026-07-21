@@ -16,7 +16,8 @@ from .db.runtime import (
 from .dependencies import (
     clear_mt5_executor,
     get_executor_for_account_id,
-    is_account_runtime_active,
+    is_account_runtime_owner,
+    restore_account_executor,
     set_mt5_executor_factory,
 )
 from .routers import (
@@ -69,7 +70,7 @@ async def lifespan(app: FastAPI):
 
     # Start account-aware WebSocket broadcaster.
     _broadcaster_task = asyncio.create_task(
-        start_broadcaster(get_executor_for_account_id, manager, is_account_runtime_active)
+        start_broadcaster(get_executor_for_account_id, manager, is_account_runtime_owner)
     )
 
     yield
@@ -175,6 +176,9 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.close(code=1008)
         return
 
+    # Restore saved credentials after an API/bridge restart before exposing the
+    # live feed. The blocking RPyC handshake runs outside the event loop.
+    await asyncio.to_thread(restore_account_executor, account["id"])
     await manager.connect(websocket, account["id"])
     try:
         while True:

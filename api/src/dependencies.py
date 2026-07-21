@@ -76,6 +76,12 @@ def is_account_runtime_active(account_id: str, executor: Any | None = None) -> b
     )
 
 
+def is_account_runtime_owner(account_id: str, executor: Any | None = None) -> bool:
+    """Return whether this account owns the shared terminal, even while recovering."""
+    del executor
+    return _active_runtime_account_id == account_id
+
+
 def get_mt5_executor(
     account: Annotated[dict[str, Any], Depends(get_active_account)],
 ) -> Any:
@@ -109,6 +115,34 @@ def connect_account_executor(account_id: str, config_values: dict[str, str]) -> 
         _active_runtime_account_id = account_id
 
     return result
+
+
+def restore_account_executor(account_id: str) -> dict:
+    """Restore the saved account runtime without displacing another account.
+
+    This is used when a dashboard WebSocket reconnects after an API restart or
+    a dropped MT5 bridge. It deliberately refuses to take over a terminal that
+    currently belongs to a different dashboard account.
+    """
+    if _active_runtime_account_id not in (None, account_id):
+        return {
+            "success": False,
+            "connected": False,
+            "error": "MT5 runtime is active for another account",
+        }
+
+    executor = get_executor_for_account_id(account_id)
+    if is_account_runtime_active(account_id, executor) and executor.is_alive():
+        return {"success": True, "connected": True, "health": executor.health_check()}
+
+    config = load_account_config(account_id, reveal_secrets=True)
+    if not all(config.get(key) for key in ("MT5_LOGIN", "MT5_PASSWORD", "MT5_SERVER")):
+        return {
+            "success": False,
+            "connected": False,
+            "error": "Saved MT5 configuration is incomplete",
+        }
+    return connect_account_executor(account_id, config)
 
 
 def active_runtime_account_id() -> str | None:

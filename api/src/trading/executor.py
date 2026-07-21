@@ -258,6 +258,30 @@ class MT5Executor:
         except Exception:
             return False
 
+    def get_dashboard_snapshot(self) -> tuple[list[Any], Any]:
+        """Read one internally consistent positions/account snapshot.
+
+        The shared adapter is also used by HTTP price requests. Holding the
+        executor lock here keeps the two related dashboard reads together and
+        lets the broadcaster distinguish a transient read failure from a real
+        empty account.
+        """
+        with self._connection_lock:
+            if not self._ensure_connected() or self._mt5 is None:
+                raise RuntimeError("MT5 connection is not available")
+
+            positions = self._mt5.positions_get()
+            account = self._mt5.account_info()
+            if account is None:
+                raise RuntimeError("MT5 account information is temporarily unavailable")
+            return list(positions or []), account
+
+    def recover_connection(self) -> bool:
+        """Force a clean reconnect after repeated live-snapshot failures."""
+        with self._connection_lock:
+            self.connected = False
+            return self._reconnect()
+
     def _ensure_connected(self) -> bool:
         """Ensure we have an active connection, checking periodically.
 

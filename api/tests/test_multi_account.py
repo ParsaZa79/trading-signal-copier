@@ -375,3 +375,37 @@ def test_mt5_executor_requires_account_to_own_runtime(monkeypatch):
 
     assert exc_info.value.status_code == 503
     assert secondary.disconnect_called is True
+
+
+def test_restore_account_executor_reconnects_saved_runtime_without_displacing_another(
+    monkeypatch,
+):
+    executor = _RuntimeExecutor(connected=False)
+    monkeypatch.setattr(dependencies, "_mt5_executors", {"primary": executor})
+    monkeypatch.setattr(dependencies, "_active_runtime_account_id", None)
+    monkeypatch.setattr(
+        dependencies,
+        "load_account_config",
+        lambda account_id, reveal_secrets: {
+            "MT5_LOGIN": "123456",
+            "MT5_PASSWORD": "saved-password",
+            "MT5_SERVER": "Broker-Real",
+        },
+    )
+    calls = []
+
+    def connect(account_id, config):
+        calls.append((account_id, config["MT5_SERVER"]))
+        return {"success": True, "connected": True, "health": {}}
+
+    monkeypatch.setattr(dependencies, "connect_account_executor", connect)
+
+    result = dependencies.restore_account_executor("primary")
+
+    assert result["connected"] is True
+    assert calls == [("primary", "Broker-Real")]
+
+    monkeypatch.setattr(dependencies, "_active_runtime_account_id", "other")
+    refused = dependencies.restore_account_executor("primary")
+    assert refused["connected"] is False
+    assert calls == [("primary", "Broker-Real")]
