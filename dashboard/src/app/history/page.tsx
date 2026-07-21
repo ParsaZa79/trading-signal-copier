@@ -25,6 +25,7 @@ import {
   Target,
   BarChart3,
   Calendar,
+  Loader2,
 } from "lucide-react";
 import { SymbolCell } from "@/components/dashboard/symbol-icon";
 import { PageContainer, AnimatedSection } from "@/components/motion";
@@ -300,6 +301,90 @@ function GroupHeader({
   );
 }
 
+const loadingCellWidths = [
+  "w-24",
+  "w-14",
+  "w-10",
+  "w-20",
+  "w-20",
+  "w-16",
+  "w-24",
+  "w-12",
+];
+
+function HistoryTableLoading() {
+  return (
+    <div
+      className="relative min-h-[360px] overflow-hidden"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading trade history"
+    >
+      <div className="flex items-center gap-3 border-b border-border-subtle bg-bg-tertiary/20 px-6 py-4">
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-accent/20 bg-accent/10 text-accent shadow-[0_0_24px_rgba(96,165,250,0.12)]">
+          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        </span>
+        <div>
+          <p className="text-sm font-medium text-text-primary">
+            Loading trade records
+          </p>
+          <p className="mt-0.5 text-xs text-text-muted">
+            Syncing your latest closed trades from MT5
+          </p>
+        </div>
+        <span className="ml-auto hidden items-center gap-2 text-[10px] font-medium uppercase tracking-[0.16em] text-text-muted sm:flex">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
+          Live sync
+        </span>
+      </div>
+
+      <div className="overflow-x-auto" aria-hidden="true">
+        <table className="w-full data-table">
+          <thead>
+            <tr className="border-b border-border-subtle bg-bg-tertiary/30">
+              <th className="px-6 py-3 text-left">Symbol</th>
+              <th className="px-6 py-3 text-left">Type</th>
+              <th className="px-6 py-3 text-right">Volume</th>
+              <th className="px-6 py-3 text-right">Open</th>
+              <th className="px-6 py-3 text-right">Close</th>
+              <th className="px-6 py-3 text-right">P&amp;L</th>
+              <th className="px-6 py-3 text-left">Closed At</th>
+              <th className="px-6 py-3 text-left">Source</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Array.from({ length: 5 }, (_, rowIndex) => (
+              <tr
+                key={rowIndex}
+                className="border-b border-border-subtle last:border-0"
+              >
+                {loadingCellWidths.map((width, cellIndex) => (
+                  <td
+                    key={cellIndex}
+                    className={cn(
+                      "px-6 py-4",
+                      cellIndex >= 2 && cellIndex <= 5 && "text-right"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "inline-block h-3 animate-pulse rounded-full bg-bg-tertiary",
+                        width,
+                        cellIndex >= 2 && cellIndex <= 5 && "ml-auto"
+                      )}
+                      style={{ animationDelay: `${rowIndex * 90 + cellIndex * 35}ms` }}
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function HistoryPage() {
   const { session } = useDashboard();
   const [trades, setTrades] = useState<TradeHistoryEntry[]>([]);
@@ -461,10 +546,7 @@ export default function HistoryPage() {
         />
         <PanelBody flush>
           {isLoading ? (
-            <EmptyState
-              icon={<History className="w-5 h-5 animate-pulse" />}
-              title="Loading trade history…"
-            />
+            <HistoryTableLoading />
           ) : trades.length === 0 ? (
             <EmptyState
               icon={<History className="w-5 h-5" />}
