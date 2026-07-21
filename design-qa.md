@@ -94,7 +94,6 @@ The user-selected blue field is implemented as a real WebGL fragment shader rath
 - [x] Browser interaction and console verification
 
 final result: passed
-
 ---
 
 # Password reset email design QA
@@ -133,5 +132,50 @@ A separate focused crop was not needed because the complete 600-pixel email and 
 ## Follow-up polish
 
 - P3: dedicated inbox-client screenshots in Outlook desktop could confirm the exact fallback-link wrapping and square-corner degradation, but this does not block the production-safe template.
+
+final result: passed
+
+---
+
+# Connection verification design QA
+
+## Reference and test state
+
+- Source visual truth: `/Users/parsaz/.codex/generated_images/019f844a-152d-71b2-a555-08042d7438af/exec-59988658-8516-4741-bb0f-04b33a493656.png`
+- Implementation screenshot: `/Users/parsaz/.codex/visualizations/2026/07/21/019f844a-152d-71b2-a555-08042d7438af/setup-connection-verified-implementation.png`
+- Viewport: 1440 x 1024
+- State: desktop account setup after a successful broker verification, with the completion dialog fully open after its entrance animation.
+
+## Comparison evidence
+
+- Full-view comparison: `/Users/parsaz/.codex/visualizations/2026/07/21/019f844a-152d-71b2-a555-08042d7438af/setup-connection-verified-comparison.png`
+  - The dialog matches the reference's centered 520 px footprint, hierarchy, vertical rhythm, and dark success treatment.
+  - The implementation deliberately preserves the product's current sidebar, header, and setup shell rather than replacing them with elements invented by the generated concept.
+- Focused dialog comparison: `/Users/parsaz/.codex/visualizations/2026/07/21/019f844a-152d-71b2-a555-08042d7438af/setup-connection-verified-modal-comparison.png`
+  - The shield, heading, supporting copy, account row, status, and two actions align with the selected direction.
+  - The implemented broker row is marginally less dense than the generated reference; this is a non-blocking P3 difference caused by reusing the real broker mark and current type scale.
+
+## Comparison history
+
+1. The initial implementation capture showed a backdrop that was too opaque and blurred, and a modal that was 560 px wide. These P2 mismatches were corrected by adding a dialog-specific backdrop class, using `bg-black/50` without blur, reducing the dialog to 520 px, and capturing after the animation settled.
+2. The post-fix full-view and focused comparisons show no actionable P0, P1, or P2 differences.
+
+## Required surface checks
+
+- Typography: uses the product's current Saans family, with heading, body, metadata, and action hierarchy matched to the reference.
+- Spacing and layout: centered dialog footprint, internal padding, account-row height, and action spacing are aligned.
+- Colors and tokens: existing dark surface, border, success green, and accent blue tokens are preserved.
+- Images and icons: reuses the real AMarkets logo and the project's Lucide shield icon; no placeholder or fabricated assets were introduced.
+- Copy and content: matches the selected connection-verified direction and displays the verified server and masked login.
+
+## Interaction and regression checks
+
+- Successful setup reveals the completion dialog.
+- `Open dashboard` replaces the setup route with `/`.
+- `Stay in account settings` routes first-time setup to `/config` and closes the dialog in edit mode.
+- Backdrop click and Escape do not dismiss the required completion decision.
+- Browser console errors during the verified state: none.
+- Dashboard lint, unit tests, and production build pass.
+- API tests, Ruff, and Pyright pass.
 
 final result: passed

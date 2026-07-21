@@ -636,10 +636,8 @@ function AuthenticatedDashboardLayout({
   useEffect(() => {
     if (shouldForceSetup) {
       router.replace("/setup");
-    } else if (!needsSetup && isSetupRoute) {
-      router.replace("/");
     }
-  }, [isSetupRoute, needsSetup, router, shouldForceSetup]);
+  }, [router, shouldForceSetup]);
 
   const fetchHeaderPrices = useCallback(async () => {
     if (!account) {

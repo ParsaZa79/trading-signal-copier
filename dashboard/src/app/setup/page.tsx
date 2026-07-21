@@ -22,6 +22,7 @@ import { PageLoading } from "@/components/layout";
 import { useDashboard } from "@/components/layout/dashboard-layout";
 import { AnimatedSection, PageContainer } from "@/components/motion";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   activateAccount,
@@ -60,6 +61,16 @@ const SETUP_STEPS = [
 
 type SetupConfig = typeof EMPTY_CONFIG;
 type AccountKind = "live" | "demo";
+type VerifiedConnection = {
+  accountName: string;
+  login: string;
+  server: string;
+};
+
+function maskMt5Login(login: string) {
+  const visible = login.trim().slice(-4);
+  return visible ? `••••${visible}` : "••••";
+}
 
 export function AccountSetupContent({ editMode = false }: { editMode?: boolean }) {
   const router = useRouter();
@@ -79,6 +90,10 @@ export function AccountSetupContent({ editMode = false }: { editMode?: boolean }
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [accountKind, setAccountKind] = useState<AccountKind>("live");
   const [useCustomBrokerServer, setUseCustomBrokerServer] = useState(false);
+  const [verifiedConnection, setVerifiedConnection] = useState<VerifiedConnection | null>(null);
+  const [enteredWithCompletedSetup] = useState(
+    () => !editMode && !designPreview && session.setupComplete
+  );
 
   const activeAccount = useMemo(
     () => session.accounts.find((account) => account.id === session.activeAccountId),
@@ -117,6 +132,10 @@ export function AccountSetupContent({ editMode = false }: { editMode?: boolean }
   useEffect(() => {
     if (activeAccount?.name) setAccountName(activeAccount.name);
   }, [activeAccount?.name]);
+
+  useEffect(() => {
+    if (enteredWithCompletedSetup) router.replace("/");
+  }, [enteredWithCompletedSetup, router]);
 
   useEffect(() => {
     if (designPreview) {
@@ -286,6 +305,11 @@ export function AccountSetupContent({ editMode = false }: { editMode?: boolean }
     if (designPreview) {
       await new Promise((resolve) => window.setTimeout(resolve, 500));
       setMessage("Account details saved and the broker connection was verified.");
+      setVerifiedConnection({
+        accountName,
+        login: config.MT5_LOGIN,
+        server: config.MT5_SERVER,
+      });
       setIsSubmitting(false);
       return;
     }
@@ -314,12 +338,13 @@ export function AccountSetupContent({ editMode = false }: { editMode?: boolean }
       setMessage("Finishing account setup…");
       await completeAccountSetup();
       const refreshed = await getMe();
+      setVerifiedConnection({
+        accountName,
+        login: config.MT5_LOGIN,
+        server: config.MT5_SERVER,
+      });
       setSession(refreshed);
-      if (editMode) {
-        setMessage("Account details saved and the broker connection was verified.");
-      } else {
-        router.replace("/");
-      }
+      setMessage("Account details saved and the broker connection was verified.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not complete setup");
       setMessage(null);
@@ -337,77 +362,181 @@ export function AccountSetupContent({ editMode = false }: { editMode?: boolean }
   }
 
   return (
-    <PageContainer className="mx-auto max-w-[1120px] pb-10">
-      <AnimatedSection>
-        <SetupProgress currentStep={step} onStepChange={goToStep} />
-      </AnimatedSection>
+    <>
+      <PageContainer className="mx-auto max-w-[1120px] pb-10">
+        <AnimatedSection>
+          <SetupProgress currentStep={step} onStepChange={goToStep} />
+        </AnimatedSection>
 
-      <AnimatedSection className="space-y-6">
-        {step === 1 && (
-          <BrokerStep
-            brokerQuery={brokerQuery}
-            filteredBrokerGroups={visibleBrokerGroups}
-            selectedBrand={selectedBrand}
-            setBrokerQuery={setBrokerQuery}
-            chooseBroker={chooseBroker}
-            chooseManualBroker={chooseManualBroker}
-          />
-        )}
+        <AnimatedSection className="space-y-6">
+          {step === 1 && (
+            <BrokerStep
+              brokerQuery={brokerQuery}
+              filteredBrokerGroups={visibleBrokerGroups}
+              selectedBrand={selectedBrand}
+              setBrokerQuery={setBrokerQuery}
+              chooseBroker={chooseBroker}
+              chooseManualBroker={chooseManualBroker}
+            />
+          )}
 
-        {step === 2 && (
-          <AccountTypeStep
-            accountKind={accountKind}
-            config={config}
-            matchingServers={matchingServers}
-            selectedBrand={selectedBrand}
-            useCustomBrokerServer={useCustomBrokerServer}
-            chooseAccountKind={chooseAccountKind}
-            updateField={updateField}
-          />
-        )}
+          {step === 2 && (
+            <AccountTypeStep
+              accountKind={accountKind}
+              config={config}
+              matchingServers={matchingServers}
+              selectedBrand={selectedBrand}
+              useCustomBrokerServer={useCustomBrokerServer}
+              chooseAccountKind={chooseAccountKind}
+              updateField={updateField}
+            />
+          )}
 
-        {step === 3 && (
-          <LoginStep
-            accountName={accountName}
-            config={config}
-            configuredSecrets={configuredSecrets}
-            hasExistingAccount={Boolean(session.activeAccountId)}
+          {step === 3 && (
+            <LoginStep
+              accountName={accountName}
+              config={config}
+              configuredSecrets={configuredSecrets}
+              hasExistingAccount={Boolean(session.activeAccountId)}
+              isSubmitting={isSubmitting}
+              setAccountName={setAccountName}
+              updateField={updateField}
+            />
+          )}
+
+          {step === 4 && (
+            <ReviewStep
+              accountKind={accountKind}
+              accountName={accountName}
+              config={config}
+              selectedBrand={selectedBrand}
+              useCustomBrokerServer={useCustomBrokerServer}
+            />
+          )}
+
+          {(error || message) && <SetupNotice error={error} message={message} />}
+
+          <SetupFooter
+            step={step}
             isSubmitting={isSubmitting}
-            setAccountName={setAccountName}
-            updateField={updateField}
+            canContinue={Boolean(selectedBrand || useCustomBrokerServer)}
+            onBack={() => (step === 1 ? router.push("/") : goToStep(step - 1))}
+            onContinue={
+              step === 1
+                ? continueFromBroker
+                : step === 2
+                  ? continueFromAccountType
+                  : step === 3
+                    ? continueFromLogin
+                    : handleSubmit
+            }
+            editMode={editMode}
           />
-        )}
+        </AnimatedSection>
+      </PageContainer>
 
-        {step === 4 && (
-          <ReviewStep
-            accountKind={accountKind}
-            accountName={accountName}
-            config={config}
-            selectedBrand={selectedBrand}
-            useCustomBrokerServer={useCustomBrokerServer}
-          />
-        )}
-
-        {(error || message) && <SetupNotice error={error} message={message} />}
-
-        <SetupFooter
-          step={step}
-          isSubmitting={isSubmitting}
-          canContinue={Boolean(selectedBrand || useCustomBrokerServer)}
-          onBack={() => (step === 1 ? router.push("/") : goToStep(step - 1))}
-          onContinue={
-            step === 1
-              ? continueFromBroker
-              : step === 2
-                ? continueFromAccountType
-                : step === 3
-                  ? continueFromLogin
-                  : handleSubmit
+      <ConnectionVerifiedDialog
+        connection={verifiedConnection}
+        selectedBrand={selectedBrand}
+        onOpenDashboard={() => router.replace("/")}
+        onStayInSettings={() => {
+          if (editMode) {
+            setVerifiedConnection(null);
+          } else {
+            router.replace("/config");
           }
-          editMode={editMode}
-        />
-      </AnimatedSection>
-    </PageContainer>
+        }}
+      />
+    </>
+  );
+}
+
+function ConnectionVerifiedDialog({
+  connection,
+  selectedBrand,
+  onOpenDashboard,
+  onStayInSettings,
+}: {
+  connection: VerifiedConnection | null;
+  selectedBrand?: BrokerBrandGroup;
+  onOpenDashboard: () => void;
+  onStayInSettings: () => void;
+}) {
+  return (
+    <Dialog
+      open={Boolean(connection)}
+      onOpenChange={() => undefined}
+      backdropClassName="bg-black/50 backdrop-blur-none"
+    >
+      <DialogContent className="w-[calc(100%-2rem)] max-w-[520px] overflow-hidden border-border-default bg-[#151517]/95 shadow-[0_28px_90px_rgba(0,0,0,0.68)] backdrop-blur-2xl">
+        {connection && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="connection-verified-title"
+            aria-describedby="connection-verified-description"
+            className="px-6 py-8 text-center sm:py-9"
+          >
+            <span className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-full border border-success/45 bg-success/[0.08] text-success shadow-[0_0_28px_rgba(52,199,89,0.12)]">
+              <ShieldCheck className="h-9 w-9" strokeWidth={1.7} />
+            </span>
+            <h2
+              id="connection-verified-title"
+              className="mt-6 text-[28px] font-semibold tracking-[-0.035em] text-text-primary"
+            >
+              Connection verified
+            </h2>
+            <p
+              id="connection-verified-description"
+              className="mx-auto mt-2 max-w-md text-sm leading-6 text-text-secondary"
+            >
+              {connection.accountName} is connected to {connection.server} and ready to use.
+            </p>
+
+            <div className="mt-6 flex min-h-[88px] items-center gap-4 rounded-2xl border border-border-default bg-bg-primary/35 p-4 text-left">
+              {selectedBrand ? (
+                <BrokerLogo brand={selectedBrand} size="sm" />
+              ) : (
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border-subtle bg-bg-tertiary text-accent">
+                  <Server className="h-5 w-5" />
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium text-text-primary">{connection.server}</p>
+                <p className="mt-0.5 font-mono text-xs text-text-muted">
+                  {maskMt5Login(connection.login)}
+                </p>
+              </div>
+              <span className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-success">
+                <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                Connected
+              </span>
+            </div>
+
+            <Button
+              type="button"
+              variant="accent"
+              size="lg"
+              autoFocus
+              onClick={onOpenDashboard}
+              className="mt-5 h-[52px] w-full bg-accent-dark text-white hover:bg-accent"
+            >
+              Open dashboard
+            </Button>
+            <button
+              type="button"
+              onClick={onStayInSettings}
+              className="mt-4 text-sm font-medium text-accent hover:text-accent-light focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            >
+              Stay in account settings
+            </button>
+            <p className="mt-5 text-xs leading-5 text-text-muted">
+              You can update or retest this connection later from Settings.
+            </p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
