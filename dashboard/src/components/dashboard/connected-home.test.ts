@@ -40,6 +40,30 @@ describe("home dashboard helpers", () => {
       null
     );
 
-    expect(readiness).toEqual({ accountReady: true, riskPolicyReady: false });
+    expect(readiness).toEqual({
+      accountReady: true,
+      liveDataReady: true,
+      riskPolicyReady: false,
+    });
+  });
+
+  it("keeps the last valid account snapshot visible during a socket reconnect", () => {
+    const readiness = homeDashboardTestHelpers.dashboardReadiness(
+      false,
+      {
+        balance: 2.16,
+        equity: 2.16,
+        margin: 0,
+        free_margin: 2.16,
+        profit: 0,
+      },
+      1
+    );
+
+    expect(readiness).toEqual({
+      accountReady: true,
+      liveDataReady: false,
+      riskPolicyReady: true,
+    });
   });
 });

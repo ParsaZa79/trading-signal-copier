@@ -276,9 +276,10 @@ function dashboardReadiness(
   account: AccountInfo | null,
   dailyLossPercent: number | null
 ) {
-  const accountReady = isConnected && account !== null;
+  const accountReady = account !== null;
   return {
     accountReady,
+    liveDataReady: isConnected && accountReady,
     riskPolicyReady: accountReady && dailyLossPercent !== null,
   };
 }
@@ -294,48 +295,63 @@ export function ConnectedHome({
 }: ConnectedHomeProps) {
   const [snapshot, setSnapshot] = useState<HomeSnapshot>(preview ? previewSnapshot : emptySnapshot);
   const [loading, setLoading] = useState(!preview);
+  const hasAccount = account !== null;
 
   useEffect(() => {
     let cancelled = false;
+    let inFlight = false;
 
-    async function load() {
+    async function load(initial = false) {
+      if (inFlight) return;
       if (preview) {
         setSnapshot(previewSnapshot);
         setLoading(false);
         return;
       }
-      if (!account || !accountId) {
+      if (!hasAccount || !accountId) {
         setSnapshot(emptySnapshot);
         setLoading(false);
         return;
       }
 
-      setLoading(true);
+      inFlight = true;
+      if (initial) {
+        setSnapshot(emptySnapshot);
+        setLoading(true);
+      }
       const ranges = dashboardRanges();
-      const [todayResult, weekResult, overviewResult, riskResult] = await Promise.allSettled([
-        getTradeHistory(1, 100, undefined, ranges.todayFrom, ranges.todayTo),
-        getTradeHistory(1, 500, undefined, ranges.weekFrom, ranges.weekTo),
-        getCopyOverview(),
-        getCopyRiskPolicy(accountId),
-      ]);
+      try {
+        const [todayResult, weekResult, overviewResult, riskResult] = await Promise.allSettled([
+          getTradeHistory(1, 100, undefined, ranges.todayFrom, ranges.todayTo),
+          getTradeHistory(1, 500, undefined, ranges.weekFrom, ranges.weekTo),
+          getCopyOverview(),
+          getCopyRiskPolicy(accountId),
+        ]);
 
-      if (cancelled) return;
-      setSnapshot({
-        todayTrades: todayResult.status === "fulfilled" ? todayResult.value.trades : [],
-        weekTrades: weekResult.status === "fulfilled" ? weekResult.value.trades : [],
-        overview: overviewResult.status === "fulfilled" ? overviewResult.value : null,
-        riskPolicy: riskResult.status === "fulfilled" ? riskResult.value.risk_policy : null,
-      });
-      setLoading(false);
+        if (cancelled) return;
+        setSnapshot((current) => ({
+          todayTrades:
+            todayResult.status === "fulfilled" ? todayResult.value.trades : current.todayTrades,
+          weekTrades:
+            weekResult.status === "fulfilled" ? weekResult.value.trades : current.weekTrades,
+          overview:
+            overviewResult.status === "fulfilled" ? overviewResult.value : current.overview,
+          riskPolicy:
+            riskResult.status === "fulfilled" ? riskResult.value.risk_policy : current.riskPolicy,
+        }));
+      } finally {
+        inFlight = false;
+        if (!cancelled && initial) setLoading(false);
+      }
     }
 
-    void load();
-    const timer = window.setInterval(load, 30_000);
+    void load(true);
+    const timer = window.setInterval(() => void load(false), 30_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [account, accountId, preview]);
+  }, [accountId, hasAccount, preview]);
 
   const closedTodayPnL = snapshot.todayTrades.reduce((sum, trade) => sum + trade.profit, 0);
   const floatingPnL = positions.reduce((sum, position) => sum + position.profit, 0);
@@ -355,7 +371,7 @@ export function ConnectedHome({
     [account?.balance, account?.equity, snapshot.weekTrades]
   );
   const recentExecutions = snapshot.overview?.recent_executions.slice(0, 2) ?? [];
-  const { accountReady, riskPolicyReady } = dashboardReadiness(
+  const { accountReady, liveDataReady, riskPolicyReady } = dashboardReadiness(
     isConnected,
     account,
     dailyLossPercent
@@ -372,6 +388,8 @@ export function ConnectedHome({
           <p className="mt-1.5 text-base text-text-secondary">
             {!accountReady
               ? "Your account is set up. We’re waiting for MT5 account data."
+              : !liveDataReady
+                ? "Showing your latest account snapshot while MT5 reconnects."
               : dayTone === "positive"
                 ? `Your account is up ${formatCurrency(todayPnL)} today.`
                 : dayTone === "negative"
