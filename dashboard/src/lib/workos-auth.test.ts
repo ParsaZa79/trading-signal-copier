@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { authErrorMessage, isValidEmail, normalizeEmail, safeReturnTo } from "./workos-auth";
+import {
+  authErrorMessage,
+  isValidEmail,
+  normalizeEmail,
+  safeReturnTo,
+  workosRedirectUri,
+} from "./workos-auth";
 
 describe("WorkOS auth helpers", () => {
   it("normalizes and validates email addresses", () => {
@@ -13,6 +19,15 @@ describe("WorkOS auth helpers", () => {
     expect(safeReturnTo("https://attacker.example")).toBe("/");
     expect(safeReturnTo("//attacker.example")).toBe("/");
     expect(safeReturnTo("/\\attacker.example")).toBe("/");
+  });
+
+  it("normalizes the configured public callback URI", () => {
+    expect(
+      workosRedirectUri("  https://dashboard.example.com/auth/callback  "),
+    ).toBe("https://dashboard.example.com/auth/callback");
+    expect(() => workosRedirectUri("file:///tmp/callback")).toThrow(
+      "WorkOS redirect URI must use HTTP or HTTPS",
+    );
   });
 
   it("does not expose unexpected provider errors", () => {

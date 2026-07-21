@@ -14,6 +14,7 @@ import {
   type AuthActionResult,
   type AuthMessageResult,
   type GoogleAuthUrlResult,
+  workosRedirectUri,
 } from "@/lib/workos-auth";
 
 type SignInInput = {
@@ -47,12 +48,6 @@ function workosClientId() {
   const clientId = process.env.WORKOS_CLIENT_ID?.trim();
   if (!clientId) throw new Error("WorkOS client ID is not configured");
   return clientId;
-}
-
-function workosRedirectUri() {
-  const value = process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI?.trim();
-  if (!value) throw new Error("WorkOS redirect URI is not configured");
-  return new URL(value).toString();
 }
 
 async function invitationEmail(invitationToken?: string) {

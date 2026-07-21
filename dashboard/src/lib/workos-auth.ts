@@ -15,6 +15,20 @@ export const OAUTH_VERIFIER_COOKIE = "sc_workos_oauth_verifier";
 export const OAUTH_RETURN_TO_COOKIE = "sc_workos_oauth_return_to";
 export const OAUTH_INVITATION_COOKIE = "sc_workos_oauth_invitation";
 
+export function workosRedirectUri(
+  value = process.env.NEXT_PUBLIC_WORKOS_REDIRECT_URI,
+) {
+  const candidate = value?.trim();
+  if (!candidate) throw new Error("WorkOS redirect URI is not configured");
+
+  const url = new URL(candidate);
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("WorkOS redirect URI must use HTTP or HTTPS");
+  }
+
+  return url.toString();
+}
+
 export function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
