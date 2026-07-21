@@ -15,6 +15,7 @@ export type TimePreset =
   | "yesterday"
   | "this_week"
   | "this_month"
+  | "this_year"
   | "custom"
   | "all";
 
@@ -47,10 +48,24 @@ const presets: { id: TimePreset; label: string; icon: React.ReactNode }[] = [
     label: "This Month",
     icon: <CalendarRange className="w-3.5 h-3.5" />,
   },
+  {
+    id: "this_year",
+    label: "This Year",
+    icon: <CalendarRange className="w-3.5 h-3.5" />,
+  },
 ];
 
-function getPresetDates(preset: TimePreset): DateRange {
-  const now = new Date();
+function formatDateInput(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function getPresetDates(
+  preset: TimePreset,
+  now = new Date()
+): DateRange {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
@@ -58,15 +73,15 @@ function getPresetDates(preset: TimePreset): DateRange {
   switch (preset) {
     case "today":
       return {
-        from: today.toISOString().split("T")[0],
-        to: tomorrow.toISOString().split("T")[0],
+        from: formatDateInput(today),
+        to: formatDateInput(tomorrow),
       };
     case "yesterday": {
       const yesterday = new Date(today);
       yesterday.setDate(yesterday.getDate() - 1);
       return {
-        from: yesterday.toISOString().split("T")[0],
-        to: today.toISOString().split("T")[0],
+        from: formatDateInput(yesterday),
+        to: formatDateInput(today),
       };
     }
     case "this_week": {
@@ -75,15 +90,22 @@ function getPresetDates(preset: TimePreset): DateRange {
       const diff = dayOfWeek === 0 ? 6 : dayOfWeek - 1; // Monday as start
       weekStart.setDate(today.getDate() - diff);
       return {
-        from: weekStart.toISOString().split("T")[0],
-        to: tomorrow.toISOString().split("T")[0],
+        from: formatDateInput(weekStart),
+        to: formatDateInput(tomorrow),
       };
     }
     case "this_month": {
       const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
       return {
-        from: monthStart.toISOString().split("T")[0],
-        to: tomorrow.toISOString().split("T")[0],
+        from: formatDateInput(monthStart),
+        to: formatDateInput(tomorrow),
+      };
+    }
+    case "this_year": {
+      const yearStart = new Date(today.getFullYear(), 0, 1);
+      return {
+        from: formatDateInput(yearStart),
+        to: formatDateInput(tomorrow),
       };
     }
     case "all":
@@ -127,7 +149,7 @@ export function TimeRangeFilter({
 
   const handleCustomApply = () => {
     if (customFrom) {
-      const toDate = customTo || new Date().toISOString().split("T")[0];
+      const toDate = customTo || formatDateInput(new Date());
       onChange("custom", { from: customFrom, to: toDate });
       setShowCustom(false);
     }
