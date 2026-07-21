@@ -271,6 +271,18 @@ function executionLabel(action: string, traderName: string, symbol: string) {
   return `${safeTrader} closed ${symbol}`;
 }
 
+function dashboardReadiness(
+  isConnected: boolean,
+  account: AccountInfo | null,
+  dailyLossPercent: number | null
+) {
+  const accountReady = isConnected && account !== null;
+  return {
+    accountReady,
+    riskPolicyReady: accountReady && dailyLossPercent !== null,
+  };
+}
+
 export function ConnectedHome({
   account,
   accountId,
@@ -343,7 +355,11 @@ export function ConnectedHome({
     [account?.balance, account?.equity, snapshot.weekTrades]
   );
   const recentExecutions = snapshot.overview?.recent_executions.slice(0, 2) ?? [];
-  const accountReady = isConnected && account !== null;
+  const { accountReady, riskPolicyReady } = dashboardReadiness(
+    isConnected,
+    account,
+    dailyLossPercent
+  );
   const dayTone = todayPnL > 0 ? "positive" : todayPnL < 0 ? "negative" : "steady";
 
   return (
@@ -374,10 +390,10 @@ export function ConnectedHome({
           <div className="grid xl:grid-cols-[1.9fr_0.95fr]">
             <div className="min-w-0 border-b border-border-subtle p-5 sm:p-8 xl:border-b-0 xl:border-r">
               <p className="text-base text-text-secondary">Total account value</p>
-              {accountReady && dailyLossPercent !== null ? (
+              {accountReady ? (
                 <>
                   <p className="mt-2 text-4xl font-semibold tracking-[-0.04em] text-text-primary tabular-nums sm:text-5xl">
-                    {formatCurrency(account.equity)}
+                    {formatCurrency(account?.equity ?? 0)}
                   </p>
                   <div className="mt-7 min-h-[190px]">
                     {loading ? (
@@ -445,7 +461,7 @@ export function ConnectedHome({
                   </span>
                 </span>
               </div>
-              {accountReady ? (
+              {riskPolicyReady ? (
                 <>
                   <p className="mt-3 text-4xl font-semibold tracking-[-0.035em] text-text-primary tabular-nums">
                     {formatCurrency(dailyLossRemaining)}
@@ -597,7 +613,7 @@ export function ConnectedHome({
 
       <span className="sr-only" aria-live="polite">
         {accountReady
-          ? `Account value ${formatCurrency(account.equity)}. ${positions.length} open trades.`
+          ? `Account value ${formatCurrency(account?.equity ?? 0)}. ${positions.length} open trades.`
           : "Waiting for MT5 account data."}
       </span>
     </PageContainer>
@@ -654,6 +670,7 @@ function EmptyActivity({ title, description }: { title: string; description: str
 }
 
 export const homeDashboardTestHelpers = {
+  dashboardReadiness,
   dashboardRanges,
   displayNameFromEmail,
   executionLabel,

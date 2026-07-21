@@ -26,4 +26,20 @@ describe("home dashboard helpers", () => {
       "XAUUSD protection was updated"
     );
   });
+
+  it("shows account data even when a daily loss policy has not been selected", () => {
+    const readiness = homeDashboardTestHelpers.dashboardReadiness(
+      true,
+      {
+        balance: 2.16,
+        equity: 2.16,
+        margin: 0,
+        free_margin: 2.16,
+        profit: 0,
+      },
+      null
+    );
+
+    expect(readiness).toEqual({ accountReady: true, riskPolicyReady: false });
+  });
 });
