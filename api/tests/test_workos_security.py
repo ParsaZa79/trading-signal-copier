@@ -3,16 +3,18 @@ from __future__ import annotations
 import json
 import time
 from types import SimpleNamespace
+from typing import cast
 
 import jwt
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import WebSocket
 from jwt.algorithms import RSAAlgorithm
 
 from src import security
 
-ISSUER = "https://api.workos.com/"
 CLIENT_ID = "client_test_123"
+ISSUER = f"https://api.workos.com/user_management/{CLIENT_ID}"
 
 
 def _keypair():
@@ -74,6 +76,60 @@ def test_workos_token_uses_default_jwks_when_optional_override_is_blank(
 
     assert claims is not None
     assert seen_urls == [f"https://api.workos.com/sso/jwks/{CLIENT_ID}"]
+
+
+def test_workos_token_uses_application_scoped_issuer_by_default(monkeypatch):
+    monkeypatch.setenv("WORKOS_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setenv("WORKOS_ISSUER", "")
+    private, pyjwk = _keypair()
+    monkeypatch.setattr(
+        security,
+        "_workos_jwk_client",
+        lambda _url: SimpleNamespace(get_signing_key_from_jwt=lambda _token: pyjwk),
+    )
+
+    assert security.verify_workos_token(_token(private)) is not None
+    assert (
+        security.verify_workos_token(_token(private, iss="https://api.workos.com/"))
+        is None
+    )
+
+
+def test_websocket_accepts_application_scoped_workos_issuer(monkeypatch):
+    from src import access_store
+
+    monkeypatch.setenv("WORKOS_CLIENT_ID", CLIENT_ID)
+    monkeypatch.setenv("WORKOS_ISSUER", "")
+    private, pyjwk = _keypair()
+    monkeypatch.setattr(
+        security,
+        "_workos_jwk_client",
+        lambda _url: SimpleNamespace(get_signing_key_from_jwt=lambda _token: pyjwk),
+    )
+    monkeypatch.setattr(
+        access_store,
+        "resolve_workos_member_by_id",
+        lambda user_id: {
+            "id": user_id,
+            "email": "owner@example.test",
+            "role": "owner",
+            "status": "active",
+        },
+    )
+    websocket = cast(
+        WebSocket,
+        SimpleNamespace(
+            query_params={"token": _token(private)},
+            headers={},
+            cookies={},
+        ),
+    )
+
+    user = security.current_user_for_websocket(websocket)
+
+    assert user is not None
+    assert user["id"] == "user_existing123"
+    assert user["session_id"] == "session_123"
 
 
 @pytest.mark.parametrize(

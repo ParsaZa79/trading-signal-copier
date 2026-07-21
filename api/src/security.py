@@ -42,7 +42,9 @@ def verify_workos_token(token: str) -> dict[str, Any] | None:
     if not workos_enabled() or not token:
         return None
     client_id = os.getenv("WORKOS_CLIENT_ID", "").strip()
-    issuer = os.getenv("WORKOS_ISSUER", "").strip() or "https://api.workos.com/"
+    issuer = os.getenv("WORKOS_ISSUER", "").strip() or (
+        f"https://api.workos.com/user_management/{client_id}"
+    )
     jwks_url = os.getenv("WORKOS_JWKS_URL", "").strip() or (
         f"https://api.workos.com/sso/jwks/{client_id}"
     )
