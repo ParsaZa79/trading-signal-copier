@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   Activity,
   AlertTriangle,
@@ -19,6 +20,7 @@ import { useDashboard } from "@/components/layout/dashboard-layout";
 import { SymbolIcon } from "@/components/dashboard/symbol-icon";
 import { ModifyDialog } from "@/components/dashboard/modify-dialog";
 import { AnimatedSection, PageContainer } from "@/components/motion";
+import { PageLoading } from "@/components/layout";
 import { LegacyDialog as Dialog } from "@/components/ui/dialog";
 import { cancelOrder, closePosition, getPendingOrders, modifyPosition } from "@/lib/api";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -62,7 +64,18 @@ function fullDate() {
 }
 
 export default function PositionsPage() {
+  return (
+    <Suspense fallback={<PageLoading label="Opening positions…" />}>
+      <PositionsPageContent />
+    </Suspense>
+  );
+}
+
+function PositionsPageContent() {
+  const searchParams = useSearchParams();
   const { positions, reconnect, session, designPreview } = useDashboard();
+  const requestedTicket = Number(searchParams.get("ticket"));
+  const openedRequestedTicketRef = useRef<number | null>(null);
   const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>(
     designPreview ? previewPendingOrders : []
   );
@@ -99,6 +112,18 @@ export default function PositionsPage() {
     const timer = window.setInterval(loadPendingOrders, 5000);
     return () => window.clearInterval(timer);
   }, [designPreview, loadPendingOrders, session.activeAccountId]);
+
+  useEffect(() => {
+    if (!Number.isFinite(requestedTicket) || requestedTicket <= 0) {
+      openedRequestedTicketRef.current = null;
+      return;
+    }
+    if (openedRequestedTicketRef.current === requestedTicket) return;
+    const requestedPosition = positions.find((position) => position.ticket === requestedTicket);
+    if (!requestedPosition) return;
+    openedRequestedTicketRef.current = requestedTicket;
+    setSelectedPosition(requestedPosition);
+  }, [positions, requestedTicket]);
 
   const floatingPnL = useMemo(
     () => positions.reduce((sum, position) => sum + position.profit, 0),

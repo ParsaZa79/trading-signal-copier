@@ -23,9 +23,10 @@ import {
 interface OrderFormProps {
   onSuccess?: () => void;
   accountId?: string;
+  initialSymbol?: string;
 }
 
-export function OrderForm({ onSuccess, accountId }: OrderFormProps) {
+export function OrderForm({ onSuccess, accountId, initialSymbol }: OrderFormProps) {
   const [symbols, setSymbols] = useState<SymbolListItem[]>([]);
   const [isLoadingSymbols, setIsLoadingSymbols] = useState(true);
   const [formData, setFormData] = useState({
@@ -51,9 +52,16 @@ export function OrderForm({ onSuccess, accountId }: OrderFormProps) {
         const fetchedSymbols = await getSymbols();
         setSymbols(fetchedSymbols);
         if (fetchedSymbols.length > 0) {
-          setFormData((prev) =>
-            prev.symbol ? prev : { ...prev, symbol: fetchedSymbols[0].value }
-          );
+          const requested = initialSymbol?.toUpperCase().replace(/[^A-Z0-9]/g, "");
+          const initialMatch = requested
+            ? fetchedSymbols.find(
+                (symbol) => symbol.value.toUpperCase().replace(/[^A-Z0-9]/g, "") === requested
+              )
+            : undefined;
+          setFormData((prev) => ({
+            ...prev,
+            symbol: initialMatch?.value ?? (prev.symbol || fetchedSymbols[0].value),
+          }));
         }
       } catch (err) {
         console.error("Failed to fetch symbols:", err);
@@ -62,7 +70,7 @@ export function OrderForm({ onSuccess, accountId }: OrderFormProps) {
       }
     };
     fetchSymbols();
-  }, [accountId]);
+  }, [accountId, initialSymbol]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

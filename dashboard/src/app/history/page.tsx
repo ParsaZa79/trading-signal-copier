@@ -386,11 +386,11 @@ function HistoryTableLoading() {
 }
 
 export default function HistoryPage() {
-  const { session } = useDashboard();
+  const { session, designPreview } = useDashboard();
   const [trades, setTrades] = useState<TradeHistoryEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(!designPreview);
   const [timePreset, setTimePreset] = useState<TimePreset>("all");
   const [dateRange, setDateRange] = useState<DateRange>({
     from: null,
@@ -426,6 +426,7 @@ export default function HistoryPage() {
   };
 
   useEffect(() => {
+    if (designPreview) return;
     const fetchHistory = async () => {
       setIsLoading(true);
       try {
@@ -446,7 +447,7 @@ export default function HistoryPage() {
     };
 
     fetchHistory();
-  }, [page, dateRange, session.activeAccountId]);
+  }, [dateRange, designPreview, page, session.activeAccountId]);
 
   const handleTimeRangeChange = (preset: TimePreset, range: DateRange) => {
     setTimePreset(preset);

@@ -2,13 +2,21 @@
 
 import { useDashboard } from "@/components/layout/dashboard-layout";
 import { OrderForm } from "@/components/orders/order-form";
-import { PageHeader, SectionPanel, PanelHeader, PanelBody, EmptyState } from "@/components/layout";
+import {
+  PageHeader,
+  PageLoading,
+  SectionPanel,
+  PanelHeader,
+  PanelBody,
+  EmptyState,
+} from "@/components/layout";
 import { formatNumber } from "@/lib/utils";
 import { getSymbolPrice, getSymbols, type SymbolListItem } from "@/lib/api";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { Suspense, useEffect, useState, useRef, useCallback } from "react";
 import { TrendingUp, TrendingDown, Activity } from "lucide-react";
 import { SymbolCell } from "@/components/dashboard/symbol-icon";
 import { PageContainer, AnimatedSection } from "@/components/motion";
+import { useSearchParams } from "next/navigation";
 
 interface PriceData {
   symbol: string;
@@ -18,7 +26,17 @@ interface PriceData {
 }
 
 export default function OrdersPage() {
+  return (
+    <Suspense fallback={<PageLoading label="Opening order ticket…" />}>
+      <OrdersPageContent />
+    </Suspense>
+  );
+}
+
+function OrdersPageContent() {
+  const searchParams = useSearchParams();
   const { reconnect, session } = useDashboard();
+  const requestedSymbol = searchParams.get("symbol") ?? undefined;
   const [symbols, setSymbols] = useState<SymbolListItem[]>([]);
   const [prices, setPrices] = useState<Record<string, PriceData>>({});
   const [isLoadingSymbols, setIsLoadingSymbols] = useState(true);
@@ -90,7 +108,11 @@ export default function OrdersPage() {
       </AnimatedSection>
 
       <AnimatedSection className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <OrderForm onSuccess={reconnect} accountId={session.activeAccountId ?? undefined} />
+        <OrderForm
+          onSuccess={reconnect}
+          accountId={session.activeAccountId ?? undefined}
+          initialSymbol={requestedSymbol}
+        />
 
         <SectionPanel>
           <PanelHeader

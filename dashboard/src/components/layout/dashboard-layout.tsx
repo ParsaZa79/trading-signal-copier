@@ -1,6 +1,7 @@
 "use client";
 
 import { MobileNav, Sidebar } from "./sidebar";
+import { CommandDeck, CommandSearchTrigger } from "./command-deck";
 import { useAccessToken, useAuth } from "@workos-inc/authkit-nextjs/components";
 import { SymbolIcon } from "@/components/dashboard/symbol-icon";
 import { Button } from "@/components/ui/button";
@@ -120,7 +121,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (
     process.env.NEXT_PUBLIC_COPY_TRADING_PREVIEW === "true" &&
-    pathname === "/positions"
+    (pathname === "/positions" || pathname === "/history" || pathname === "/orders")
   ) {
     return (
       <DashboardPreviewLayout state="connected">
@@ -209,6 +210,9 @@ function DashboardPreviewLayout({
   children,
   state,
 }: DashboardLayoutProps & { state: "connected" | "setup" }) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [commandOpen, setCommandOpen] = useState(false);
   const connected = state === "connected";
   const previewSession: AuthSession = {
     token: "design-preview",
@@ -288,10 +292,7 @@ function DashboardPreviewLayout({
                 {connected ? "MT5 connected" : "Account setup required"}
               </p>
             </div>
-            <div className="ml-auto hidden w-full max-w-sm items-center rounded-xl border border-border-subtle bg-bg-secondary/60 px-3 md:flex">
-              <Search className="h-4 w-4 text-text-muted" />
-              <span className="px-3 py-2.5 text-sm text-text-muted">Search symbols, tickets…</span>
-            </div>
+            <CommandSearchTrigger onOpen={() => setCommandOpen(true)} />
             {connected && (
               <div className="hidden items-center gap-2 xl:flex">
                 {HEADER_SYMBOLS.map((symbol) => (
@@ -313,6 +314,13 @@ function DashboardPreviewLayout({
             </div>
           </header>
           <main className="p-4 pb-24 md:pb-4 lg:p-6">{children}</main>
+          <CommandDeck
+            open={commandOpen}
+            onOpenChange={setCommandOpen}
+            pathname={pathname}
+            positions={previewPositions}
+            onConnectAccount={() => router.push("/config")}
+          />
         </div>
       </div>
     </DashboardContext.Provider>
@@ -474,6 +482,7 @@ function AuthenticatedDashboardLayout({
   });
   const [headerPrices, setHeaderPrices] = useState<Record<string, PriceData>>({});
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
   const [createAccountOpen, setCreateAccountOpen] = useState(false);
   const [newAccountName, setNewAccountName] = useState("");
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
@@ -616,17 +625,7 @@ function AuthenticatedDashboardLayout({
                 </p>
               </div>
 
-              <div className="relative hidden md:block flex-1 max-w-md">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
-                <input
-                  type="text"
-                  placeholder="Search symbols, tickets..."
-                  className="w-full h-9 pl-10 pr-14 rounded-xl bg-bg-tertiary/80 border border-border-subtle text-sm text-text-primary placeholder:text-text-muted focus:border-border-default focus:ring-0 transition-colors"
-                />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded bg-bg-elevated border border-border-subtle">
-                  <span className="text-[10px] text-text-muted font-mono">⌘K</span>
-                </div>
-              </div>
+              <CommandSearchTrigger onOpen={() => setCommandOpen(true)} />
 
               <div className="flex items-center gap-4">
                 <div className="hidden lg:flex items-center gap-3">
@@ -772,6 +771,14 @@ function AuthenticatedDashboardLayout({
             )}
             {children}
           </main>
+
+          <CommandDeck
+            open={commandOpen}
+            onOpenChange={setCommandOpen}
+            pathname={pathname}
+            positions={positions}
+            onConnectAccount={() => setCreateAccountOpen(true)}
+          />
 
           {createAccountOpen && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">

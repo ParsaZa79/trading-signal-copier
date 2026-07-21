@@ -1,141 +1,60 @@
-# Authentication Design QA
+**Comparison Target**
 
-## Evidence
+- Source visual truth: `/Users/parsaz/.codex/generated_images/019f844a-152d-71b2-a555-08042d7438af/exec-97f933a8-2493-4f48-9e1a-eded362cda3e.png`
+- Browser-rendered implementation: `/tmp/trading-command-deck-qa-final-1406.png`
+- Normalized source: `/tmp/trading-command-deck-source-normalized-1406.png`
+- Side-by-side comparison input: `/tmp/trading-command-deck-qa-comparison-normalized.png`
+- Route and state: production-mode local `/history`, dark theme, global command deck open, search focused, first recent destination selected.
+- Viewport: `1406 × 994` CSS px at device scale factor `1`.
+- Source pixels: `1493 × 1054`, downsampled with Lanczos to `1406 × 994` for the comparison.
+- Implementation pixels: `1406 × 994`; no density conversion required.
 
-- Source visual truth: `/Users/parsaz/.codex/generated_images/019f7454-8bb0-7d92-9641-707b8c8d5f46/exec-961d25ee-f86e-4427-a229-e29666c71f53.png`
-- Final desktop sign-in implementation: `/tmp/signal-copier-auth-sign-in-icon-check.png`
-- Final mobile sign-in implementation: `/tmp/signal-copier-auth-mobile-390x844.png`
-- Final mobile sign-up implementation: `/tmp/signal-copier-auth-mobile-signup-390x844.png`
-- Full-view comparison: `/tmp/signal-copier-auth-design-qa-passed-full.png`
-- Focused shader/headline comparison: `/tmp/signal-copier-auth-design-qa-passed-left.png`
-- Focused form/security comparison: `/tmp/signal-copier-auth-design-qa-passed-right.png`
-- Desktop viewport: 1377 × 994. The 1487 × 1058 source was proportionally normalized and center-cropped to the browser viewport before comparison.
-- Mobile viewport: 390 × 844, rendered in a same-origin iframe so responsive media queries used a true 390px layout viewport.
-- Theme: dark
-- State: local-only authentication preview; Better Auth production behavior remains intact and no credentials or account data were submitted.
+**Findings**
 
-## Findings
-
-No actionable P0, P1, or P2 findings remain.
-
-## Full-view comparison
-
-The implementation preserves the selected composition: near-black split canvas, quiet vertical divider, Signal Copier mark, exact two-line beginner-facing headline, explanatory copy, three connected setup steps, focused authentication column, broad primary action, sign-up handoff, and lower security reassurance. The final comparison shows equivalent major-region proportions, content hierarchy, density, and vertical rhythm.
-
-The user-selected blue field is implemented as a real WebGL fragment shader rather than a static image or CSS-gradient approximation. Its motion is intentionally slow and low-amplitude, with a reduced-motion still frame and hidden-canvas pausing so it feels alive without distracting from authentication.
-
-## Focused comparisons
-
-- Shader and headline: the focused left comparison verifies the same indigo-blue concentration, black falloff, two-line headline wrap, icon journey, and generous empty space. The shader is intentionally non-identical frame to frame because motion was requested.
-- Form and security: the focused right comparison verifies matching heading hierarchy, 56px field height, leading email/lock icons, password visibility control, right-aligned recovery action, full-width CTA, secondary registration link, divider, and security message.
-
-## Required fidelity surfaces
-
-- Fonts and typography: Uses the product's Saans variable font with restrained optical weights, tight display tracking, readable 14–18px form text, and the exact selected headline wrap. Labels remain sentence case and no important text clips on desktop.
-- Spacing and layout rhythm: Desktop uses the selected two-column ratio, aligned content gutters, setup-step placement, and right-column form width. A height-aware layout prevents clipping at a 1280 × 720 viewport. Mobile collapses to one calm column while preserving the brand mark and a subtle shader crop.
-- Colors and visual tokens: Retains the product's deep black surfaces, soft off-white type, muted secondary copy, subtle hairline borders, and blue-violet accent. The shader uses a darker indigo/blue field with black falloff instead of a neon or high-contrast effect.
-- Image quality and asset fidelity: The selected visual contains no photographic or raster hero asset. The ambient field is implemented by the requested live shader. Standard interface symbols use the established Lucide icon library rather than CSS drawings, emoji, or placeholder glyphs.
-- Copy and content: Sign-in, sign-up, password recovery, reset-password, closed-registration, and unconfigured-auth states all use the same beginner-first shell. The copy avoids return claims and explains account connection, trader selection, user-controlled limits, and secure verification in plain language.
-
-## Comparison history
-
-### Pass 1 — blocked
-
-- [P2] The first desktop pass clipped the setup-step descriptions at a 1280 × 720 viewport.
-  - Fix: Added height-aware spacing, smaller step geometry at short viewports, and compact security spacing.
-- [P2] The first sign-up pass scrolled before the primary action and account-switch link were visible.
-  - Fix: Reduced short-viewport padding while preserving the larger selected composition at taller desktop sizes.
-
-### Pass 2 — blocked
-
-- [P2] The form column was narrower than the source and lacked the email/lock field icons visible in the selected direction.
-  - Fix: Matched the source gutter width and added accessible leading icons to the shared Input component.
-- [P2] The first shader pass was too broad and violet relative to the selected blue field.
-  - Fix: Shifted the field origin toward the left edge, tightened its falloff, moved the focal area upward, and tuned the blue channels while preserving slow motion.
-
-### Pass 3 — passed
-
-- Post-fix desktop evidence: `/tmp/signal-copier-auth-sign-in-icon-check.png`
-- Post-fix full comparison: `/tmp/signal-copier-auth-design-qa-passed-full.png`
-- Post-fix mobile evidence: `/tmp/signal-copier-auth-mobile-390x844.png` and `/tmp/signal-copier-auth-mobile-signup-390x844.png`
 - No actionable P0, P1, or P2 differences remain.
+- Fonts and typography: the implementation reuses the dashboard’s Saans stack and existing text tokens. Search, group labels, row labels, metadata, and keyboard hints preserve the source hierarchy and optical weight.
+- Spacing and layout rhythm: the final deck uses the source’s centered content-area placement, `752px` maximum width, `70vh` maximum height, compact rows, section dividers, `20px` radius, and equivalent footer rhythm.
+- Colors and visual tokens: the dashboard background, elevated panel, border, blue focus/selection treatment, muted labels, dimming layer, and elevation match the selected direction while staying on the existing product tokens.
+- Image quality and asset fidelity: the target contains no raster product imagery. All visible interface icons use the project’s Lucide icon library; no emoji, placeholder art, handcrafted SVG, or CSS-drawn asset replaces source imagery.
+- Copy and content: search guidance, Recent, Navigate, Quick actions, navigation destinations, action labels, relative timestamps, and keyboard hints match the selected direction. The clean QA session shows one recent page instead of the source’s three seeded examples; this is expected dynamic history, and the implementation expands to three unique destinations as users navigate.
+- Accessibility and interaction: the dialog exposes modal/listbox semantics, returns focus when closed, traps Tab/Shift+Tab, supports Arrow Up/Down, Enter, Escape, click-outside dismissal, and both Command-K and Control-K.
 
-## Interactions, responsive behavior, and runtime checks
+**Comparison History**
 
-- Password visibility toggles through a keyboard-focusable control with an explicit accessible name and pressed state.
-- Forgot-password switches to the reset-request form and returns to sign-in without losing the shared shell.
-- Sign-in and sign-up links preserve the local-only preview safely; preview submissions report that no authentication request was sent.
-- Sign-up keeps its primary action and sign-in handoff visible at 390 × 844; supporting security copy can continue below the initial viewport.
-- Desktop and mobile captures have no horizontal overflow.
-- Two shader frames captured 1.4 seconds apart produced different image hashes and a low mean pixel delta, confirming subtle—not distracting—motion.
-- A fresh desktop render produced no browser console errors.
-- ESLint passed.
-- Vitest passed: 77 tests, with 1 skipped integration test. The existing third-party `financial-flag-icons` source-map warning remains non-failing and unrelated.
-- TypeScript and the Next.js production build passed.
-- `git diff --check` passed.
+- Iteration 1 — [P2] Modal geometry and density were too tall for the target viewport. The first implementation used a `78vh` frame with `12vh` top offset, a `48px` search control, and `44px` rows. This placed the deck higher and made it visually denser than the source.
+- Fix — changed the frame to `70vh` with a `15vh` top offset, reduced the search control to `44px`, reduced rows to `40px`, and aligned contextual recent labels with the source.
+- Post-fix evidence — `/tmp/trading-command-deck-qa-comparison-normalized.png` shows matching frame position, height, section rhythm, selection state, footer placement, and command density at an equal `1406 × 994` size. No P0/P1/P2 mismatch remains.
 
-## Follow-up polish
+**Focused Region Comparison**
 
-- [P3] The generated source's decorative dashed wave is omitted. The moving shader already supplies the requested sense of aliveness, and adding another ambient motif would make the authentication screen busier.
-- [P3] The Cloudflare challenge may appear for higher-risk visitors. It uses the supported flexible width and interaction-only appearance, so the clean layout is preserved for most visitors while the security control remains available when required.
+- A separate crop was not needed: the command deck is the only visual target, and its typography, icons, dividers, selection border, quick actions, and footer are legible at original density in the normalized side-by-side input.
 
-## Implementation checklist
+**Primary Interactions Tested**
 
-- [x] Shared branded authentication shell
-- [x] Animated WebGL ambient shader
-- [x] Reduced-motion and hidden-canvas handling
-- [x] Sign-in and sign-up states
-- [x] Forgot-password and reset-password states
-- [x] Closed-registration and unconfigured-auth states
-- [x] Responsive desktop and mobile layouts
-- [x] Accessible password visibility control
-- [x] Local-only safe preview path
-- [x] Automated tests and production build
-- [x] Browser interaction and console verification
+- Open from the header search trigger and with `⌘K`.
+- Search `XAU/USD`, press Enter, and navigate to `/orders?symbol=XAUUSD`.
+- Search ticket `1001`, press Enter, navigate to `/positions?ticket=1001`, and open the matching trade review UI.
+- Run New order and navigate to `/orders`.
+- Run Review safety limits and navigate to `/copy-trading`.
+- Run Connect another account and invoke its account-connection destination (`/config` in preview; the authenticated shell uses the existing account-creation dialog).
+- Cycle focus backward from the search field to the final command and close from that focused row with Escape.
+- Production-mode local console check: no warnings or errors on the final `/history` command-deck state.
 
-final result: passed
+**Open Questions**
 
----
+- None.
 
-# Connection verification design QA
+**Implementation Checklist**
 
-## Reference and test state
+- [x] Match the selected command-deck frame and visual system.
+- [x] Support mouse and keyboard opening, search, selection, dismissal, and focus management.
+- [x] Persist and display up to three recent destinations.
+- [x] Search pages, market symbols, and live position tickets.
+- [x] Connect every quick action to its real dashboard workflow.
+- [x] Verify lint, tests, production build, browser interactions, console health, and normalized visual fidelity.
 
-- Source visual truth: `/Users/parsaz/.codex/generated_images/019f844a-152d-71b2-a555-08042d7438af/exec-59988658-8516-4741-bb0f-04b33a493656.png`
-- Implementation screenshot: `/Users/parsaz/.codex/visualizations/2026/07/21/019f844a-152d-71b2-a555-08042d7438af/setup-connection-verified-implementation.png`
-- Viewport: 1440 x 1024
-- State: desktop account setup after a successful broker verification, with the completion dialog fully open after its entrance animation.
+**Follow-up Polish**
 
-## Comparison evidence
-
-- Full-view comparison: `/Users/parsaz/.codex/visualizations/2026/07/21/019f844a-152d-71b2-a555-08042d7438af/setup-connection-verified-comparison.png`
-  - The dialog matches the reference's centered 520 px footprint, hierarchy, vertical rhythm, and dark success treatment.
-  - The implementation deliberately preserves the product's current sidebar, header, and setup shell rather than replacing them with elements invented by the generated concept.
-- Focused dialog comparison: `/Users/parsaz/.codex/visualizations/2026/07/21/019f844a-152d-71b2-a555-08042d7438af/setup-connection-verified-modal-comparison.png`
-  - The shield, heading, supporting copy, account row, status, and two actions align with the selected direction.
-  - The implemented broker row is marginally less dense than the generated reference; this is a non-blocking P3 difference caused by reusing the real broker mark and current type scale.
-
-## Comparison history
-
-1. The initial implementation capture showed a backdrop that was too opaque and blurred, and a modal that was 560 px wide. These P2 mismatches were corrected by adding a dialog-specific backdrop class, using `bg-black/50` without blur, reducing the dialog to 520 px, and capturing after the animation settled.
-2. The post-fix full-view and focused comparisons show no actionable P0, P1, or P2 differences.
-
-## Required surface checks
-
-- Typography: uses the product's current Saans family, with heading, body, metadata, and action hierarchy matched to the reference.
-- Spacing and layout: centered dialog footprint, internal padding, account-row height, and action spacing are aligned.
-- Colors and tokens: existing dark surface, border, success green, and accent blue tokens are preserved.
-- Images and icons: reuses the real AMarkets logo and the project's Lucide shield icon; no placeholder or fabricated assets were introduced.
-- Copy and content: matches the selected connection-verified direction and displays the verified server and masked login.
-
-## Interaction and regression checks
-
-- Successful setup reveals the completion dialog.
-- `Open dashboard` replaces the setup route with `/`.
-- `Stay in account settings` routes first-time setup to `/config` and closes the dialog in edit mode.
-- Backdrop click and Escape do not dismiss the required completion decision.
-- Browser console errors during the verified state: none.
-- Dashboard lint, unit tests, and production build pass.
-- API tests, Ruff, and Pyright pass.
+- P3: richer result ranking could prioritize frequently used commands after enough real usage data exists; this is not required for the selected design or current workflow.
 
 final result: passed
