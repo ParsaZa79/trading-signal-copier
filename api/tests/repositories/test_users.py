@@ -15,10 +15,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.db import session as db_session
 from src.db.base import Base, include_app_schema_name
+from src.models.account import AccountMembership, MembershipRole, TradingAccount
+from src.models.audit import LegacyIdentityAlias
+from src.models.copy import CopySubscription, CopyTraderProfile
 from src.models.user import UserProfile, UserRole, UserStatus
 from src.repositories.users import (
     create_user_profile,
     get_user_by_auth_subject,
+    reconcile_verified_user_profile,
     set_user_access,
 )
 
@@ -29,8 +33,8 @@ def test_copy_marketplace_is_the_current_alembic_revision() -> None:
     scripts = ScriptDirectory.from_config(AlembicConfig(API_ROOT / "alembic.ini"))
     head = scripts.get_revision("head")
     assert head is not None
-    assert head.revision == "0003_copy_marketplace"
-    assert head.down_revision == "0002_identity_accounts"
+    assert head.revision == "0004_rebind_workos_identity"
+    assert head.down_revision == "0003_copy_marketplace"
 
 
 def test_user_profile_is_owned_by_app_schema_without_auth_foreign_key() -> None:
@@ -133,6 +137,94 @@ async def test_user_subject_and_email_are_unique(repository_session: AsyncSessio
             email="second@example.com",
             email_verified=True,
         )
+
+
+@pytest.mark.integration
+async def test_verified_email_rebinds_legacy_subject_and_owned_records(
+    repository_session: AsyncSession,
+) -> None:
+    legacy_subject = "legacy-local-user"
+    workos_subject = "workos-user-current"
+    profile = await create_user_profile(
+        repository_session,
+        auth_subject=legacy_subject,
+        email="same-person@example.com",
+        email_verified=True,
+        role=UserRole.OWNER,
+    )
+    account = TradingAccount(name="Migrated trader account")
+    follower_account = TradingAccount(name="Migrated follower account")
+    repository_session.add_all([account, follower_account])
+    await repository_session.flush()
+    membership = AccountMembership(
+        account_id=account.id,
+        user_id=legacy_subject,
+        role=MembershipRole.OWNER,
+    )
+    follower_membership = AccountMembership(
+        account_id=follower_account.id,
+        user_id=legacy_subject,
+        role=MembershipRole.OWNER,
+    )
+    alias = LegacyIdentityAlias(
+        user_id=legacy_subject,
+        source="local-auth",
+        legacy_id=legacy_subject,
+    )
+    trader = CopyTraderProfile(
+        account_id=account.id,
+        owner_user_id=legacy_subject,
+        display_name="Migrated trader",
+    )
+    repository_session.add_all([membership, follower_membership, alias, trader])
+    await repository_session.flush()
+    subscription = CopySubscription(
+        trader_id=trader.id,
+        follower_account_id=follower_account.id,
+        follower_user_id=legacy_subject,
+    )
+    repository_session.add(subscription)
+    await repository_session.flush()
+    account_id = account.id
+    follower_account_id = follower_account.id
+    alias_id = alias.id
+    trader_id = trader.id
+    subscription_id = subscription.id
+
+    await reconcile_verified_user_profile(
+        repository_session,
+        auth_subject=workos_subject,
+        email=profile.email,
+        role=UserRole.OWNER,
+    )
+    await repository_session.flush()
+    repository_session.expunge_all()
+
+    assert await repository_session.get(UserProfile, legacy_subject) is None
+    reconciled = await repository_session.get(UserProfile, workos_subject)
+    assert reconciled is not None
+    assert reconciled.email == "same-person@example.com"
+    assert reconciled.role is UserRole.OWNER
+    assert (
+        await repository_session.get(AccountMembership, (account_id, workos_subject))
+        is not None
+    )
+    assert (
+        await repository_session.get(
+            AccountMembership,
+            (follower_account_id, workos_subject),
+        )
+        is not None
+    )
+    migrated_alias = await repository_session.get(LegacyIdentityAlias, alias_id)
+    migrated_trader = await repository_session.get(CopyTraderProfile, trader_id)
+    migrated_subscription = await repository_session.get(CopySubscription, subscription_id)
+    assert migrated_alias is not None
+    assert migrated_trader is not None
+    assert migrated_subscription is not None
+    assert migrated_alias.user_id == workos_subject
+    assert migrated_trader.owner_user_id == workos_subject
+    assert migrated_subscription.follower_user_id == workos_subject
 
 
 @pytest.mark.integration

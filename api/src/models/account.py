@@ -61,7 +61,11 @@ class AccountMembership(Base):
     )
     user_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("app.app_user_profiles.auth_subject", ondelete="CASCADE"),
+        ForeignKey(
+            "app.app_user_profiles.auth_subject",
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+        ),
         primary_key=True,
         index=True,
     )

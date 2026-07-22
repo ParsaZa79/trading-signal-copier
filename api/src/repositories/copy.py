@@ -26,7 +26,8 @@ from src.models.copy import (
     CopyTradeEvent,
     CopyTraderProfile,
 )
-from src.models.user import UserProfile, UserRole, UserStatus
+from src.models.user import UserRole, UserStatus
+from src.repositories.users import reconcile_verified_user_profile
 
 RISK_PRESETS: dict[CopyRiskPreset, dict[str, float | int]] = {
     CopyRiskPreset.CONSERVATIVE: {
@@ -68,25 +69,13 @@ async def ensure_copy_identity(
     """Idempotently bridge existing dashboard users/accounts into app-owned tables."""
     user_id = str(current_user["id"])
     email = str(current_user.get("email") or f"{user_id}@local.invalid").lower()
-    statement = (
-        pg_insert(UserProfile)
-        .values(
-            auth_subject=user_id,
-            email=email,
-            email_verified=True,
-            role=_role(current_user.get("role")).value,
-            status=UserStatus.ACTIVE.value,
-        )
-        .on_conflict_do_update(
-            index_elements=["auth_subject"],
-            set_={
-                "email_verified": True,
-                "role": _role(current_user.get("role")).value,
-                "status": UserStatus.ACTIVE.value,
-            },
-        )
+    await reconcile_verified_user_profile(
+        session,
+        auth_subject=user_id,
+        email=email,
+        role=_role(current_user.get("role")),
+        status=UserStatus.ACTIVE,
     )
-    await session.execute(statement)
 
     bridged: list[dict[str, Any]] = []
     for legacy in list_user_accounts(user_id):

@@ -114,7 +114,11 @@ class CopyTraderProfile(TimestampMixin, Base):
     )
     owner_user_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("app.app_user_profiles.auth_subject", ondelete="CASCADE"),
+        ForeignKey(
+            "app.app_user_profiles.auth_subject",
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
@@ -203,7 +207,11 @@ class CopySubscription(TimestampMixin, Base):
     )
     follower_user_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("app.app_user_profiles.auth_subject", ondelete="CASCADE"),
+        ForeignKey(
+            "app.app_user_profiles.auth_subject",
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+        ),
         nullable=False,
         index=True,
     )

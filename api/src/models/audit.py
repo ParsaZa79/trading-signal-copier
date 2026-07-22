@@ -50,7 +50,11 @@ class LegacyIdentityAlias(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[str] = mapped_column(
         String(128),
-        ForeignKey("app.app_user_profiles.auth_subject", ondelete="CASCADE"),
+        ForeignKey(
+            "app.app_user_profiles.auth_subject",
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+        ),
         nullable=False,
         index=True,
     )
