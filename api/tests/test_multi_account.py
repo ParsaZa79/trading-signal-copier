@@ -310,7 +310,10 @@ def test_disabled_workos_member_stays_blocked(monkeypatch, tmp_path):
         access_store.resolve_workos_member("user_workos_disabled", "disabled@example.com")
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail["code"] == "access_disabled"
+    assert exc_info.value.detail == {
+        "code": "access_disabled",
+        "message": "This dashboard account has been disabled.",
+    }
 
 
 def test_access_store_keeps_at_least_one_active_owner(monkeypatch, tmp_path):
