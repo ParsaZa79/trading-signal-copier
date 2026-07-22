@@ -196,8 +196,10 @@ export async function deleteAccessMember(
 }
 
 // Health
+export const MT5_HEALTH_ENDPOINT = "/api/health/mt5";
+
 export async function getHealth(): Promise<HealthStatus> {
-  return fetchApi("/api/health");
+  return fetchApi(MT5_HEALTH_ENDPOINT);
 }
 
 export async function connectMT5(

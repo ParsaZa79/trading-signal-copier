@@ -28,9 +28,12 @@ import { PageContainer, AnimatedSection } from "@/components/motion";
 import { formatCurrency } from "@/lib/utils";
 
 export default function SettingsPage() {
-  const { session } = useDashboard();
+  const { session, account, isConnected } = useDashboard();
   const [health, setHealth] = useState<HealthStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const mt5Health = health?.mt5;
+  const mt5Connected = mt5Health?.connected ?? isConnected;
+  const accountBalance = mt5Health?.account_balance ?? account?.balance;
 
   const fetchHealth = async () => {
     try {
@@ -85,39 +88,39 @@ export default function SettingsPage() {
                       <p className="text-xs text-text-muted">Main backend connection</p>
                     </div>
                   </div>
-                  <Badge variant="success">{health.status.toUpperCase()}</Badge>
+                  <Badge variant="success">ONLINE</Badge>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <StatusRow
                     icon={<Activity className="w-4 h-4" />}
                     label="MT5 connected"
-                    status={health.mt5.connected}
+                    status={mt5Connected}
                   />
-                  {health.mt5.ping_ok !== undefined && (
+                  {mt5Health?.ping_ok !== undefined && (
                     <StatusRow
                       icon={<Zap className="w-4 h-4" />}
                       label="Ping OK"
-                      status={health.mt5.ping_ok}
+                      status={mt5Health.ping_ok}
                     />
                   )}
-                  {health.mt5.account_accessible !== undefined && (
+                  {mt5Health?.account_accessible !== undefined && (
                     <StatusRow
                       icon={<Shield className="w-4 h-4" />}
                       label="Account accessible"
-                      status={health.mt5.account_accessible}
+                      status={mt5Health.account_accessible}
                     />
                   )}
-                  {health.mt5.trading_enabled !== undefined && (
+                  {mt5Health?.trading_enabled !== undefined && (
                     <StatusRow
                       icon={<CheckCircle className="w-4 h-4" />}
                       label="Trading enabled"
-                      status={health.mt5.trading_enabled}
+                      status={mt5Health.trading_enabled}
                     />
                   )}
                 </div>
 
-                {health.mt5.account_balance !== undefined && (
+                {accountBalance !== undefined && (
                   <div className="p-4 rounded-xl bg-bg-tertiary/50 border border-border-subtle flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <DollarSign className="w-5 h-5 text-text-secondary" />
@@ -126,15 +129,15 @@ export default function SettingsPage() {
                       </span>
                     </div>
                     <span className="text-xl font-semibold text-text-primary tabular-nums">
-                      {formatCurrency(health.mt5.account_balance)}
+                      {formatCurrency(accountBalance)}
                     </span>
                   </div>
                 )}
 
-                {health.mt5.error && (
+                {mt5Health?.error && (
                   <div className="p-4 rounded-xl bg-danger/10 border border-danger/20">
                     <p className="text-sm font-medium text-danger mb-1">Error</p>
-                    <p className="text-xs text-danger/80">{health.mt5.error}</p>
+                    <p className="text-xs text-danger/80">{mt5Health.error}</p>
                   </div>
                 )}
               </div>

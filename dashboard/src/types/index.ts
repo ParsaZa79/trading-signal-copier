@@ -94,22 +94,24 @@ export interface ApiResponse<T> {
 }
 
 // Health check types
+export interface MT5Health {
+  connected: boolean;
+  ping_ok?: boolean;
+  account_accessible?: boolean;
+  trading_enabled?: boolean;
+  account_balance?: number;
+  error?: string;
+}
+
 export interface HealthStatus {
   status: "healthy" | "unhealthy";
-  mt5: {
-    connected: boolean;
-    ping_ok?: boolean;
-    account_accessible?: boolean;
-    trading_enabled?: boolean;
-    account_balance?: number;
-    error?: string;
-  };
+  mt5?: MT5Health;
 }
 
 export interface MT5ConnectResponse {
   success: boolean;
   connected: boolean;
-  health: HealthStatus["mt5"];
+  health: MT5Health;
   error?: string | null;
 }
 
