@@ -17,7 +17,7 @@ from ..access_store import (
     validate_member_invitation,
     validate_member_removal,
 )
-from ..security import get_current_user
+from ..security import get_current_user, provision_current_user
 from ..session_payload import build_session_payload
 from ..workos_client import (
     delete_workos_user,
@@ -43,6 +43,14 @@ class UpdateMemberRequest(BaseModel):
 
 @router.get("/me")
 async def me(current_user: dict = current_user_dependency) -> dict:
+    return build_session_payload(current_user)
+
+
+@router.post("/session")
+async def provision_session(
+    current_user: dict = Depends(provision_current_user),
+) -> dict:
+    """Provision or link app access after a successful WorkOS authentication."""
     return build_session_payload(current_user)
 
 

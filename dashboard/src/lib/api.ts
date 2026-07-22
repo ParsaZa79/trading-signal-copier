@@ -20,6 +20,7 @@ import type {
   CopyTrader,
   CopyTradingMode,
 } from "@/types";
+import { apiErrorFromResponse } from "./api-error";
 
 function toBrokerSymbol(symbol: string): string {
   const normalized = symbol.trim().toUpperCase();
@@ -52,14 +53,13 @@ async function fetchApi<T>(
   });
 
   if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    throw new Error(error.detail || `HTTP ${response.status}`);
+    throw await apiErrorFromResponse(response);
   }
 
   return response.json();
 }
 
-export const AUTH_SESSION_ENDPOINT = "/api/access/me";
+export const AUTH_SESSION_ENDPOINT = "/api/access/session";
 
 export async function getMe(accessToken: string): Promise<AuthSession> {
   const response = await fetchApi<{
@@ -67,7 +67,7 @@ export async function getMe(accessToken: string): Promise<AuthSession> {
     accounts: DashboardAccount[];
     active_account_id: string | null;
     setup_complete?: boolean;
-  }>(AUTH_SESSION_ENDPOINT);
+  }>(AUTH_SESSION_ENDPOINT, { method: "POST" });
   return {
     token: accessToken,
     user: response.user,

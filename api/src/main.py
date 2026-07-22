@@ -117,7 +117,7 @@ app.add_middleware(
 
 # Include routers
 protected = [Depends(get_current_user)]
-app.include_router(access.router, prefix="/api/access", tags=["Access"], dependencies=protected)
+app.include_router(access.router, prefix="/api/access", tags=["Access"])
 app.include_router(
     accounts.router,
     prefix="/api/accounts",

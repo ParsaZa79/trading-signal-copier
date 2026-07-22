@@ -11,7 +11,6 @@ from src.routers import access as access_router
 def _isolate_storage(monkeypatch, tmp_path):
     monkeypatch.delenv("WORKOS_CLIENT_ID", raising=False)
     monkeypatch.setenv("ACCESS_BOOTSTRAP_EMAILS", "owner@example.com")
-    monkeypatch.setenv("ACCESS_REQUIRE_INVITE", "false")
     monkeypatch.setattr(security, "USERS_PATH", tmp_path / "users.json")
     monkeypatch.setattr(security, "DEV_SECRET_PATH", tmp_path / ".dev_app_secret")
     monkeypatch.setattr(account_store, "ACCOUNTS_PATH", tmp_path / "accounts.json")
@@ -53,7 +52,8 @@ def test_dashboard_proxy_headers_authenticate_workos_user(monkeypatch, tmp_path)
                 "x-workos-user-email": "proxy-user@example.com",
                 "x-workos-session-id": "sess_proxy",
             }
-        )
+        ),
+        provision=True,
     )
 
     assert user is not None
@@ -171,17 +171,38 @@ def test_uninvited_workos_users_are_self_service_traders(monkeypatch, tmp_path):
     assert trader["active_account_id"] is None
 
 
-def test_invite_only_mode_blocks_uninvited_workos_users(monkeypatch, tmp_path):
+def test_legacy_invite_only_settings_cannot_block_or_promote_self_service_users(
+    monkeypatch,
+    tmp_path,
+):
     _isolate_storage(monkeypatch, tmp_path)
     monkeypatch.setenv("ACCESS_REQUIRE_INVITE", "true")
+    monkeypatch.setenv("ACCESS_SELF_SIGNUP_ROLE", "admin")
 
     access_store.resolve_workos_member("user_workos_owner", "owner@example.com")
+    trader = access_store.resolve_workos_member(
+        "user_workos_trader",
+        "trader@example.com",
+    )
 
-    with pytest.raises(HTTPException) as exc_info:
-        access_store.resolve_workos_member("user_workos_trader", "trader@example.com")
+    assert trader["role"] == "trader"
+    assert trader["status"] == "active"
 
-    assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Access not granted"
+
+def test_self_service_user_can_register_before_reserved_owner(monkeypatch, tmp_path):
+    _isolate_storage(monkeypatch, tmp_path)
+
+    trader = access_store.resolve_workos_member(
+        "user_workos_trader",
+        "trader@example.com",
+    )
+    owner = access_store.resolve_workos_member(
+        "user_workos_owner",
+        "owner@example.com",
+    )
+
+    assert trader["role"] == "trader"
+    assert owner["role"] == "owner"
 
 
 def test_accounts_are_not_created_until_requested(monkeypatch, tmp_path):
@@ -289,7 +310,7 @@ def test_disabled_workos_member_stays_blocked(monkeypatch, tmp_path):
         access_store.resolve_workos_member("user_workos_disabled", "disabled@example.com")
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "Access disabled"
+    assert exc_info.value.detail["code"] == "access_disabled"
 
 
 def test_access_store_keeps_at_least_one_active_owner(monkeypatch, tmp_path):

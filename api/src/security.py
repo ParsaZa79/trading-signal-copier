@@ -308,7 +308,7 @@ def _token_from_authorization_header(authorization: str | None) -> str | None:
     return authorization[len(prefix) :].strip() or None
 
 
-def _workos_user_from_proxy_headers(headers: Any) -> dict[str, Any] | None:
+def _workos_identity_from_proxy_headers(headers: Any) -> dict[str, str | None] | None:
     proxy_secret = os.getenv("DASHBOARD_PROXY_SECRET")
     supplied_secret = headers.get("x-dashboard-proxy-auth")
     if not supplied_secret:
@@ -327,11 +327,31 @@ def _workos_user_from_proxy_headers(headers: Any) -> dict[str, Any] | None:
             detail="Authentication required",
         )
 
-    from .access_store import resolve_workos_member
+    return {
+        "user_id": workos_user_id,
+        "email": email,
+        "session_id": headers.get("x-workos-session-id"),
+    }
 
-    member = resolve_workos_member(workos_user_id, email)
+
+def _workos_user_from_proxy_headers(
+    headers: Any,
+    *,
+    provision: bool = False,
+) -> dict[str, Any] | None:
+    identity = _workos_identity_from_proxy_headers(headers)
+    if identity is None:
+        return None
+
+    from .access_store import resolve_workos_member, resolve_workos_member_by_id
+
+    member = (
+        resolve_workos_member(str(identity["user_id"]), str(identity["email"]))
+        if provision
+        else resolve_workos_member_by_id(str(identity["user_id"]))
+    )
     member["auth_provider"] = "workos"
-    member["session_id"] = headers.get("x-workos-session-id")
+    member["session_id"] = identity["session_id"]
     return member
 
 
@@ -354,6 +374,17 @@ async def get_current_user(
             detail="Authentication required",
         )
     return user
+
+
+async def provision_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+) -> dict[str, Any]:
+    proxy_user = _workos_user_from_proxy_headers(request.headers, provision=True)
+    if proxy_user is not None:
+        return proxy_user
+
+    return await get_current_user(request, credentials)
 
 
 def current_user_for_websocket(websocket: WebSocket) -> dict[str, Any] | None:

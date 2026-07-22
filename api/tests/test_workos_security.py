@@ -162,11 +162,11 @@ def test_workos_proxy_headers_resolve_verified_email(monkeypatch):
     monkeypatch.setenv("DASHBOARD_PROXY_SECRET", "shared-secret")
     monkeypatch.setattr(
         access_store,
-        "resolve_workos_member",
-        lambda user_id, email: {
+        "resolve_workos_member_by_id",
+        lambda user_id: {
             "id": user_id,
             "workos_user_id": user_id,
-            "email": email,
+            "email": "owner@example.test",
             "role": "owner",
             "status": "active",
         },
@@ -190,3 +190,35 @@ def test_workos_proxy_headers_resolve_verified_email(monkeypatch):
         "auth_provider": "workos",
         "session_id": "session_123",
     }
+
+
+def test_workos_proxy_session_explicitly_provisions_verified_identity(monkeypatch):
+    from src import access_store
+
+    monkeypatch.setenv("DASHBOARD_PROXY_SECRET", "shared-secret")
+    monkeypatch.setattr(
+        access_store,
+        "resolve_workos_member",
+        lambda user_id, email: {
+            "id": user_id,
+            "workos_user_id": user_id,
+            "email": email,
+            "role": "trader",
+            "status": "active",
+        },
+    )
+
+    user = security._workos_user_from_proxy_headers(
+        {
+            "x-dashboard-proxy-auth": "shared-secret",
+            "x-workos-user-id": "user_new123",
+            "x-workos-user-email": "new@example.test",
+            "x-workos-session-id": "session_456",
+        },
+        provision=True,
+    )
+
+    assert user is not None
+    assert user["id"] == "user_new123"
+    assert user["role"] == "trader"
+    assert user["session_id"] == "session_456"

@@ -2,6 +2,8 @@
 
 import { getWorkOS, saveSession, signOut } from "@workos-inc/authkit-nextjs";
 import { cookies } from "next/headers";
+import { ApiError, dashboardAccessMessage } from "@/lib/api-error";
+import { dashboardNeedsSetup, provisionDashboardAccess } from "@/lib/dashboard-access";
 import {
   authErrorMessage,
   isValidEmail,
@@ -78,12 +80,19 @@ export async function signInWithPassword(input: SignInInput): Promise<AuthAction
       password: input.password,
       invitationToken: input.invitationToken?.trim() || undefined,
     });
+    const dashboardSession = await provisionDashboardAccess(authResponse);
     await saveSession(authResponse, workosRedirectUri());
-    return { ok: true, redirectTo: safeReturnTo(input.returnTo) };
+    return {
+      ok: true,
+      redirectTo: dashboardNeedsSetup(dashboardSession) ? "/setup" : safeReturnTo(input.returnTo),
+    };
   } catch (error) {
     return {
       ok: false,
-      error: authErrorMessage(error, "Unable to sign in. Check your details and try again."),
+      error:
+        error instanceof ApiError
+          ? dashboardAccessMessage(error)
+          : authErrorMessage(error, "Unable to sign in. Check your details and try again."),
     };
   }
 }
@@ -126,8 +135,12 @@ export async function signUpWithPassword(input: SignUpInput): Promise<AuthAction
       password: input.password,
       invitationToken: input.invitationToken?.trim() || undefined,
     });
+    const dashboardSession = await provisionDashboardAccess(authResponse);
     await saveSession(authResponse, workosRedirectUri());
-    return { ok: true, redirectTo: safeReturnTo(input.returnTo) };
+    return {
+      ok: true,
+      redirectTo: dashboardNeedsSetup(dashboardSession) ? "/setup" : safeReturnTo(input.returnTo),
+    };
   } catch (error) {
     if (createdUserId) {
       try {
@@ -138,7 +151,13 @@ export async function signUpWithPassword(input: SignUpInput): Promise<AuthAction
     }
     return {
       ok: false,
-      error: authErrorMessage(error, "Unable to create your account. Check your details and try again."),
+      error:
+        error instanceof ApiError
+          ? dashboardAccessMessage(error)
+          : authErrorMessage(
+              error,
+              "Unable to create your account. Check your details and try again.",
+            ),
     };
   }
 }

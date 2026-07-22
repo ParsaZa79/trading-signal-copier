@@ -13,6 +13,9 @@ interface SignInPageProps {
 }
 
 const errorMessages: Record<string, string> = {
+  access_disabled: "This dashboard account has been disabled. Ask an owner to restore access.",
+  access_setup_failed:
+    "Google sign-in succeeded, but dashboard setup is temporarily unavailable. Please try again.",
   auth_not_configured: "Authentication is not configured correctly.",
   google_auth_failed: "Google sign-in could not be completed. Please try again.",
   google_cancelled: "Google sign-in was cancelled.",

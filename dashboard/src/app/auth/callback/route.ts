@@ -10,6 +10,8 @@ import {
   safeReturnTo,
   workosRedirectUri,
 } from "@/lib/workos-auth";
+import { ApiError } from "@/lib/api-error";
+import { dashboardNeedsSetup, provisionDashboardAccess } from "@/lib/dashboard-access";
 
 function equalState(received: string | null, expected: string | undefined) {
   if (!received || !expected) return false;
@@ -65,9 +67,14 @@ export async function GET(request: NextRequest) {
       codeVerifier,
       invitationToken,
     });
+    const dashboardSession = await provisionDashboardAccess(authResponse);
     await saveSession(authResponse, redirectUri);
-    return clearOAuthCookies(NextResponse.redirect(new URL(returnTo, redirectUri), 303));
-  } catch {
+    const destination = dashboardNeedsSetup(dashboardSession) ? "/setup" : returnTo;
+    return clearOAuthCookies(NextResponse.redirect(new URL(destination, redirectUri), 303));
+  } catch (error) {
+    if (error instanceof ApiError) {
+      return signInError(error.code === "access_disabled" ? "access_disabled" : "access_setup_failed");
+    }
     return signInError("google_auth_failed");
   }
 }

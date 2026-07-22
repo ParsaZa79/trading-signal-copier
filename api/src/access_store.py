@@ -20,6 +20,7 @@ ACCOUNTS_PATH = DATA_DIR / "accounts.json"
 ACCESS_ROLES = {"owner", "admin", "trader", "viewer"}
 ACCESS_STATUSES = {"active", "disabled", "pending"}
 ACCESS_ADMIN_ROLES = {"owner", "admin"}
+SELF_SERVICE_ROLE = "trader"
 
 
 def _utc_now() -> str:
@@ -78,14 +79,8 @@ def _bootstrap_emails() -> set[str]:
     return {_clean_email(item) for item in raw.split(",") if item.strip()}
 
 
-def _self_signup_enabled() -> bool:
-    raw = os.getenv("ACCESS_REQUIRE_INVITE", "").strip().lower()
-    return raw not in {"1", "true", "yes", "on"}
-
-
-def _default_self_signup_role() -> str:
-    role = os.getenv("ACCESS_SELF_SIGNUP_ROLE", "trader").strip().lower()
-    return role if role in ACCESS_ROLES - {"owner"} else "trader"
+def _access_error(code: str, message: str) -> dict[str, str]:
+    return {"code": code, "message": message}
 
 
 def _legacy_user_for_email(email: str) -> dict[str, Any] | None:
@@ -197,7 +192,13 @@ def resolve_workos_member(workos_user_id: str, email: str) -> dict[str, Any]:
     member = _member_by_workos_id(store, clean_id)
     if member is not None:
         if member.get("status") != "active":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_access_error(
+                    "access_disabled",
+                    "This dashboard account has been disabled.",
+                ),
+            )
         member["email"] = clean_email
         member["workos_user_id"] = clean_id
         member["last_seen_at"] = _utc_now()
@@ -208,7 +209,13 @@ def resolve_workos_member(workos_user_id: str, email: str) -> dict[str, Any]:
     invited = _member_by_email(store, clean_email)
     if invited is not None:
         if invited.get("status") == "disabled":
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=_access_error(
+                    "access_disabled",
+                    "This dashboard account has been disabled.",
+                ),
+            )
 
         old_id = str(invited["id"])
         migrated_active_account_id = (
@@ -233,17 +240,16 @@ def resolve_workos_member(workos_user_id: str, email: str) -> dict[str, Any]:
     allowed_bootstrap = _bootstrap_emails()
     legacy_user = _legacy_user_for_email(clean_email)
     has_active_owner = _owner_count(store) > 0
-    if not has_active_owner and allowed_bootstrap and clean_email not in allowed_bootstrap:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
-    if has_active_owner and not _self_signup_enabled():
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
 
     legacy_active_account_id = (
         _migrate_legacy_accounts(str(legacy_user["id"]), clean_id)
         if legacy_user is not None
         else None
     )
-    role = "owner" if not has_active_owner else _default_self_signup_role()
+    can_bootstrap_owner = not has_active_owner and (
+        not allowed_bootstrap or clean_email in allowed_bootstrap
+    )
+    role = "owner" if can_bootstrap_owner else SELF_SERVICE_ROLE
     member = _create_member(
         store,
         member_id=clean_id,
@@ -268,9 +274,21 @@ def resolve_workos_member_by_id(workos_user_id: str) -> dict[str, Any]:
     store = _load_store()
     member = _member_by_workos_id(store, clean_id)
     if member is None:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access not granted")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_access_error(
+                "access_not_provisioned",
+                "Dashboard access has not been provisioned for this session.",
+            ),
+        )
     if member.get("status") != "active":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access disabled")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_access_error(
+                "access_disabled",
+                "This dashboard account has been disabled.",
+            ),
+        )
     return _sanitize_member(member)
 
 

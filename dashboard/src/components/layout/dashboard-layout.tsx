@@ -15,6 +15,7 @@ import {
 } from "@/lib/api";
 import { type AuthSession, setActiveAccountId } from "@/lib/auth-storage";
 import { signOutAction } from "@/app/auth/actions";
+import { ApiError } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -344,7 +345,8 @@ function WorkOSDashboardLayout({ children }: DashboardLayoutProps) {
   const getAccessTokenRef = useRef(getAccessToken);
   const [session, setSessionState] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [accessError, setAccessError] = useState<string | null>(null);
+  const [accessError, setAccessError] = useState<Error | null>(null);
+  const [sessionAttempt, setSessionAttempt] = useState(0);
 
   useEffect(() => {
     getAccessTokenRef.current = getAccessToken;
@@ -375,25 +377,15 @@ function WorkOSDashboardLayout({ children }: DashboardLayoutProps) {
         const token = await getAccessTokenRef.current();
         if (!token) throw new Error("Authentication required");
 
-        let refreshed: AuthSession | null = null;
-        let lastError: unknown = null;
-        for (let attempt = 0; attempt < 2 && !refreshed; attempt += 1) {
-          try {
-            refreshed = await getMe(token);
-          } catch (error) {
-            lastError = error;
-            if (attempt === 0) {
-              await new Promise((resolve) => window.setTimeout(resolve, 350));
-            }
-          }
-        }
-        if (!refreshed) throw lastError ?? new Error("Access not granted");
+        const refreshed = await getMe(token);
         if (!cancelled) setSession(refreshed);
       } catch (error) {
         if (!cancelled) {
           setSessionState(null);
           setAccessError(
-            error instanceof Error ? error.message : "Dashboard access could not be verified"
+            error instanceof Error
+              ? error
+              : new Error("Dashboard access could not be verified"),
           );
         }
       } finally {
@@ -405,7 +397,7 @@ function WorkOSDashboardLayout({ children }: DashboardLayoutProps) {
     return () => {
       cancelled = true;
     };
-  }, [authLoading, setSession, workosUserId]);
+  }, [authLoading, sessionAttempt, setSession, workosUserId]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -425,25 +417,41 @@ function WorkOSDashboardLayout({ children }: DashboardLayoutProps) {
   }
 
   if (accessError || tokenError || !session) {
+    const currentError = accessError || tokenError;
+    const accessDisabled =
+      currentError instanceof ApiError && currentError.code === "access_disabled";
     return (
       <main className="min-h-screen bg-bg-primary flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-xl border border-border-subtle bg-bg-secondary p-6">
           <p className="text-xs uppercase tracking-wider text-text-muted">Access</p>
           <h1 className="mt-2 text-xl font-semibold text-text-primary">
-            Dashboard access could not be verified
+            {accessDisabled
+              ? "This dashboard account is disabled"
+              : "We couldn't finish setting up your dashboard"}
           </h1>
           <p className="mt-2 text-sm text-text-muted">
-            Your WorkOS session is valid, but this dashboard could not match it to an active access
-            record. Try signing in again; if this continues, ask an owner to verify your email.
+            {accessDisabled
+              ? "Your sign-in is valid, but an owner has disabled this account. Ask them to restore access before signing in again."
+              : "Your sign-in succeeded. We couldn't create or load your dashboard profile, so no account data has been changed."}
           </p>
-          {(accessError || tokenError) && (
+          {currentError && (
             <p className="mt-3 text-xs text-danger">
-              {accessError || tokenError?.message}
+              {currentError.message}
             </p>
           )}
-          <Button className="mt-5" variant="outline" onClick={() => void signOutAction()}>
-            Sign out
-          </Button>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {!accessDisabled && (
+              <Button
+                variant="accent"
+                onClick={() => setSessionAttempt((attempt) => attempt + 1)}
+              >
+                Try again
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => void signOutAction()}>
+              Sign out
+            </Button>
+          </div>
         </div>
       </main>
     );
@@ -474,10 +482,8 @@ function AuthenticatedDashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const isSetupRoute = pathname.startsWith("/setup");
-  const isPlatformRoute = pathname.startsWith("/copy-trading");
-  const isHomeRoute = pathname === "/";
   const needsSetup = !session.setupComplete || !session.activeAccountId;
-  const shouldForceSetup = needsSetup && !isHomeRoute && !isSetupRoute && !isPlatformRoute;
+  const shouldForceSetup = needsSetup && !isSetupRoute;
   const { positions, account, isConnected, error, reconnect } = useWebSocket({
     enabled: session.setupComplete && Boolean(session.activeAccountId),
     token: session.token,
