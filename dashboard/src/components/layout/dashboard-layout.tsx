@@ -121,7 +121,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   if (
     process.env.NEXT_PUBLIC_COPY_TRADING_PREVIEW === "true" &&
-    (pathname === "/positions" || pathname === "/history" || pathname === "/orders")
+    (pathname === "/positions" ||
+      pathname === "/history" ||
+      pathname === "/orders" ||
+      pathname === "/settings")
   ) {
     return (
       <DashboardPreviewLayout state="connected">
@@ -609,7 +612,7 @@ function AuthenticatedDashboardLayout({
         />
         <MobileNav />
 
-        <div className="flex-1 flex flex-col min-h-screen">
+        <div className="min-w-0 flex-1 flex flex-col min-h-screen">
           <header className="h-14 border-b border-border-subtle bg-bg-primary/70 backdrop-blur-xl sticky top-0 z-40">
             <div className="h-full px-4 lg:px-6 flex items-center justify-between gap-4">
               <div className="min-w-0">

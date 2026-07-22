@@ -28,9 +28,21 @@ import { PageContainer, AnimatedSection } from "@/components/motion";
 import { formatCurrency } from "@/lib/utils";
 
 export default function SettingsPage() {
-  const { session, account, isConnected } = useDashboard();
-  const [health, setHealth] = useState<HealthStatus | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { session, account, isConnected, designPreview } = useDashboard();
+  const previewHealth: HealthStatus | null = designPreview
+    ? {
+        status: "healthy",
+        mt5: {
+          connected: true,
+          ping_ok: true,
+          account_accessible: true,
+          trading_enabled: true,
+          account_balance: account?.balance,
+        },
+      }
+    : null;
+  const [health, setHealth] = useState<HealthStatus | null>(previewHealth);
+  const [isLoading, setIsLoading] = useState(!designPreview);
   const mt5Health = health?.mt5;
   const mt5Connected = mt5Health?.connected ?? isConnected;
   const accountBalance = mt5Health?.account_balance ?? account?.balance;
@@ -47,11 +59,13 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
+    if (designPreview) return;
+
     setIsLoading(true);
     fetchHealth();
     const interval = setInterval(fetchHealth, 10000);
     return () => clearInterval(interval);
-  }, [session.activeAccountId]);
+  }, [designPreview, session.activeAccountId]);
 
   return (
     <PageContainer>
